@@ -71,3 +71,15 @@
 - [ ] Verify the expected compile failures.
 - [ ] Implement the DTO additions, detail conversion, client method, and handler.
 - [ ] Run formatting, all tests, vet, build, and local HTTP smoke checks.
+
+### Task 6: Cached profile snapshots and ranked stats
+
+**Files:** Modify `main_test.go` and `main.go`; consume updated `web/templates/index.tmpl` and CSS supplied by Claude.
+
+**Interfaces:** Add `PageData.LastUpdatedLabel`, `ProfileView.SoloRank`, `ProfileView.FlexRank`, `RankView`, League-V4 DTO conversion, and a mutex-protected per-player cache owned by `App`. A normal cache hit performs no Riot calls; `refresh=1` bypasses it and atomically replaces the snapshot only after complete success.
+
+- [ ] Add failing tests for League-V4 routing/filtering/win-rate conversion and unranked queues.
+- [ ] Add failing handler tests for case-insensitive cache hits, refresh overwrite, and refresh failure preserving/rendering the last-good snapshot.
+- [ ] Verify failures are caused by missing cache/rank behavior.
+- [ ] Implement the cache, handler orchestration, League-V4 call, and view conversion.
+- [ ] Run formatting, all tests, vet, build, and compiled-handler smoke checks.

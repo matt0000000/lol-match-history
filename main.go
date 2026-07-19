@@ -29,11 +29,12 @@ const riotVerificationToken = "78f3e35f-b152-4401-b2bb-1d2ffecdc690"
 var webFiles embed.FS
 
 type PageData struct {
-	Query   string
-	Region  string
-	Error   string
-	Profile *ProfileView
-	Matches []MatchView
+	Query            string
+	Region           string
+	Error            string
+	LastUpdatedLabel string
+	Profile          *ProfileView
+	Matches          []MatchView
 }
 
 type ProfileView struct {
@@ -41,6 +42,17 @@ type ProfileView struct {
 	TagLine        string
 	ProfileIconURL string
 	SummonerLevel  int
+	SoloRank       *RankView
+	FlexRank       *RankView
+}
+
+type RankView struct {
+	Tier           string
+	Division       string
+	LeaguePoints   int
+	Wins           int
+	Losses         int
+	WinRatePercent int
 }
 
 type MatchView struct {
@@ -106,10 +118,53 @@ type MatchLoader interface {
 	MatchDetail(context.Context, string, string, time.Time) (*MatchDetailView, error)
 }
 
+type SearchSnapshot struct {
+	Profile   *ProfileView
+	Matches   []MatchView
+	UpdatedAt time.Time
+}
+
+type SearchCache struct {
+	mu      sync.RWMutex
+	entries map[string]SearchSnapshot
+}
+
+func NewSearchCache() *SearchCache {
+	return &SearchCache{entries: make(map[string]SearchSnapshot)}
+}
+
+func (c *SearchCache) Get(riotID, region string) (SearchSnapshot, bool) {
+	if c == nil {
+		return SearchSnapshot{}, false
+	}
+	c.mu.RLock()
+	snapshot, ok := c.entries[searchCacheKey(riotID, region)]
+	c.mu.RUnlock()
+	return snapshot, ok
+}
+
+func (c *SearchCache) Set(riotID, region string, snapshot SearchSnapshot) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	if c.entries == nil {
+		c.entries = make(map[string]SearchSnapshot)
+	}
+	c.entries[searchCacheKey(riotID, region)] = snapshot
+	c.mu.Unlock()
+}
+
+func searchCacheKey(riotID, region string) string {
+	return strings.ToLower(strings.TrimSpace(riotID)) + "\x00" + strings.ToLower(strings.TrimSpace(region))
+}
+
 type App struct {
 	Templates   *template.Template
 	Searcher    Searcher
 	MatchLoader MatchLoader
+	Cache       *SearchCache
+	Now         func() time.Time
 	StaticFS    fs.FS
 	Logger      *log.Logger
 }
@@ -165,6 +220,7 @@ func (a *App) handleMatchDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
+	now := a.currentTime()
 	data := PageData{
 		Query:  strings.TrimSpace(r.URL.Query().Get("q")),
 		Region: strings.ToLower(strings.TrimSpace(r.URL.Query().Get("region"))),
@@ -177,17 +233,32 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 			data.Error = "Choose a supported region."
 		} else if _, _, err := parseRiotID(data.Query); err != nil {
 			data.Error = "Enter a Riot ID in the form Name#Tag."
-		} else if a.Searcher == nil {
-			data.Error = "Search is temporarily unavailable."
 		} else {
-			profile, matches, err := a.Searcher.Search(r.Context(), data.Query, data.Region, time.Now())
-			if err != nil {
-				data.Error = err.Error()
-				if a.Logger != nil {
-					a.Logger.Printf("search %q in %s: %v", data.Query, data.Region, err)
+			cached, hasCached := a.Cache.Get(data.Query, data.Region)
+			refresh := r.URL.Query().Get("refresh") == "1"
+			if hasCached && !refresh {
+				applySnapshot(&data, cached, now)
+			} else if a.Searcher == nil {
+				data.Error = "Search is temporarily unavailable."
+				if hasCached {
+					applySnapshot(&data, cached, now)
 				}
 			} else {
-				data.Profile, data.Matches = profile, matches
+				profile, matches, err := a.Searcher.Search(r.Context(), data.Query, data.Region, now)
+				if err != nil {
+					data.Error = err.Error()
+					if hasCached {
+						applySnapshot(&data, cached, now)
+					}
+					if a.Logger != nil {
+						a.Logger.Printf("search %q in %s: %v", data.Query, data.Region, err)
+					}
+				} else {
+					completedAt := a.currentTime()
+					snapshot := SearchSnapshot{Profile: profile, Matches: matches, UpdatedAt: completedAt}
+					a.Cache.Set(data.Query, data.Region, snapshot)
+					applySnapshot(&data, snapshot, completedAt)
+				}
 			}
 		}
 	}
@@ -195,6 +266,19 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if err := a.Templates.ExecuteTemplate(w, "layout", data); err != nil && a.Logger != nil {
 		a.Logger.Printf("render index: %v", err)
 	}
+}
+
+func (a *App) currentTime() time.Time {
+	if a.Now != nil {
+		return a.Now()
+	}
+	return time.Now()
+}
+
+func applySnapshot(data *PageData, snapshot SearchSnapshot, now time.Time) {
+	data.Profile = snapshot.Profile
+	data.Matches = snapshot.Matches
+	data.LastUpdatedLabel = "Updated " + timeAgoLabel(snapshot.UpdatedAt, now)
 }
 
 type RiotClient struct {
@@ -219,6 +303,15 @@ type accountDTO struct {
 type summonerDTO struct {
 	ProfileIconID int `json:"profileIconId"`
 	SummonerLevel int `json:"summonerLevel"`
+}
+
+type leagueEntryDTO struct {
+	QueueType    string `json:"queueType"`
+	Tier         string `json:"tier"`
+	Rank         string `json:"rank"`
+	LeaguePoints int    `json:"leaguePoints"`
+	Wins         int    `json:"wins"`
+	Losses       int    `json:"losses"`
 }
 
 type matchDTO struct {
@@ -315,6 +408,10 @@ func (c *RiotClient) Search(ctx context.Context, riotID, region string, now time
 	if err != nil {
 		return nil, nil, err
 	}
+	ranks, err := c.lookupRanks(ctx, region, account.PUUID)
+	if err != nil {
+		return nil, nil, err
+	}
 	matchIDs, err := c.listMatchIDs(ctx, region, account.PUUID)
 	if err != nil {
 		return nil, nil, err
@@ -328,6 +425,14 @@ func (c *RiotClient) Search(ctx context.Context, riotID, region string, now time
 		TagLine:        account.TagLine,
 		ProfileIconURL: fmt.Sprintf("%s/cdn/%s/img/profileicon/%d.png", c.DataDragonBase, c.DataDragonVer, summoner.ProfileIconID),
 		SummonerLevel:  summoner.SummonerLevel,
+	}
+	for _, entry := range ranks {
+		switch entry.QueueType {
+		case "RANKED_SOLO_5x5":
+			profile.SoloRank = rankView(entry)
+		case "RANKED_FLEX_SR":
+			profile.FlexRank = rankView(entry)
+		}
 	}
 	return profile, matches, nil
 }
@@ -343,6 +448,33 @@ func (c *RiotClient) lookupSummoner(ctx context.Context, region, puuid string) (
 	var out summonerDTO
 	err := c.getJSON(ctx, c.PlatformBaseURL(region)+"/lol/summoner/v4/summoners/by-puuid/"+url.PathEscape(puuid), &out)
 	return out, err
+}
+
+func (c *RiotClient) lookupRanks(ctx context.Context, region, puuid string) ([]leagueEntryDTO, error) {
+	var out []leagueEntryDTO
+	err := c.getJSON(ctx, c.PlatformBaseURL(region)+"/lol/league/v4/entries/by-puuid/"+url.PathEscape(puuid), &out)
+	return out, err
+}
+
+func rankView(entry leagueEntryDTO) *RankView {
+	division := entry.Rank
+	switch strings.ToUpper(entry.Tier) {
+	case "MASTER", "GRANDMASTER", "CHALLENGER":
+		division = ""
+	}
+	games := entry.Wins + entry.Losses
+	winRate := 0
+	if games > 0 {
+		winRate = int(math.Round(float64(entry.Wins) * 100 / float64(games)))
+	}
+	return &RankView{
+		Tier:           entry.Tier,
+		Division:       division,
+		LeaguePoints:   entry.LeaguePoints,
+		Wins:           entry.Wins,
+		Losses:         entry.Losses,
+		WinRatePercent: winRate,
+	}
 }
 
 func (c *RiotClient) listMatchIDs(ctx context.Context, region, puuid string) ([]string, error) {
@@ -722,6 +854,7 @@ func main() {
 		Templates:   tmpl,
 		Searcher:    client,
 		MatchLoader: client,
+		Cache:       NewSearchCache(),
 		StaticFS:    staticFiles,
 		Logger:      logger,
 	}

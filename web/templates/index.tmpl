@@ -6,9 +6,40 @@
 {{if .Profile}}
 <section class="profile">
   <img class="profile-icon" src="{{.Profile.ProfileIconURL}}" alt="">
-  <div>
+  <div class="profile-info">
     <div class="profile-name">{{.Profile.GameName}}<span class="tag">#{{.Profile.TagLine}}</span></div>
     <div class="profile-level">Level {{.Profile.SummonerLevel}}</div>
+  </div>
+
+  <div class="ranks">
+    <div class="rank-card">
+      <div class="rank-queue">Solo/Duo</div>
+      {{if .Profile.SoloRank}}
+      <div class="rank-tier">{{.Profile.SoloRank.Tier}} {{.Profile.SoloRank.Division}}</div>
+      <div class="rank-wl">{{.Profile.SoloRank.LeaguePoints}} LP &middot; {{.Profile.SoloRank.Wins}}W {{.Profile.SoloRank.Losses}}L &middot; {{.Profile.SoloRank.WinRatePercent}}%</div>
+      {{else}}
+      <div class="rank-unranked">Unranked</div>
+      {{end}}
+    </div>
+    <div class="rank-card">
+      <div class="rank-queue">Flex 5v5</div>
+      {{if .Profile.FlexRank}}
+      <div class="rank-tier">{{.Profile.FlexRank.Tier}} {{.Profile.FlexRank.Division}}</div>
+      <div class="rank-wl">{{.Profile.FlexRank.LeaguePoints}} LP &middot; {{.Profile.FlexRank.Wins}}W {{.Profile.FlexRank.Losses}}L &middot; {{.Profile.FlexRank.WinRatePercent}}%</div>
+      {{else}}
+      <div class="rank-unranked">Unranked</div>
+      {{end}}
+    </div>
+  </div>
+
+  <div class="update-block">
+    <form method="get" action="/">
+      <input type="hidden" name="q" value="{{.Query}}">
+      <input type="hidden" name="region" value="{{.Region}}">
+      <input type="hidden" name="refresh" value="1">
+      <button type="submit" class="update-btn">Update</button>
+    </form>
+    <div class="last-updated">{{.LastUpdatedLabel}}</div>
   </div>
 </section>
 

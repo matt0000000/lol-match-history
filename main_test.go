@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"html/template"
 	"net/http"
 	"net/http/httptest"
@@ -72,6 +73,11 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 			w.Write([]byte(`{"puuid":"player-puuid","gameName":"Hide on bush","tagLine":"KR1"}`))
 		case strings.HasPrefix(r.URL.Path, "/lol/summoner/v4/summoners/by-puuid/"):
 			w.Write([]byte(`{"profileIconId":4568,"summonerLevel":777}`))
+		case strings.HasPrefix(r.URL.Path, "/lol/league/v4/entries/by-puuid/"):
+			w.Write([]byte(`[
+				{"queueType":"RANKED_SOLO_5x5","tier":"GOLD","rank":"II","leaguePoints":54,"wins":13,"losses":7},
+				{"queueType":"RANKED_FLEX_SR","tier":"MASTER","rank":"I","leaguePoints":102,"wins":2,"losses":1}
+			]`))
 		case strings.HasSuffix(r.URL.Path, "/ids"):
 			w.Write([]byte(`["KR_1"]`))
 		case strings.HasSuffix(r.URL.Path, "/KR_1"):
@@ -90,6 +96,12 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if profile.GameName != "Hide on bush" || profile.SummonerLevel != 777 {
 		t.Fatalf("profile = %#v", profile)
 	}
+	if profile.SoloRank == nil || profile.SoloRank.Tier != "GOLD" || profile.SoloRank.Division != "II" || profile.SoloRank.LeaguePoints != 54 || profile.SoloRank.Wins != 13 || profile.SoloRank.Losses != 7 || profile.SoloRank.WinRatePercent != 65 {
+		t.Fatalf("solo rank = %#v", profile.SoloRank)
+	}
+	if profile.FlexRank == nil || profile.FlexRank.Tier != "MASTER" || profile.FlexRank.Division != "" || profile.FlexRank.WinRatePercent != 67 {
+		t.Fatalf("flex rank = %#v", profile.FlexRank)
+	}
 	if len(matches) != 1 {
 		t.Fatalf("len(matches) = %d", len(matches))
 	}
@@ -106,7 +118,7 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
 	}
-	if len(paths) != 4 || !strings.Contains(paths[0], "Hide%20on%20bush/KR1") || !strings.Contains(paths[2], "start=0&count=10") {
+	if len(paths) != 5 || !strings.Contains(paths[0], "Hide%20on%20bush/KR1") || !strings.Contains(paths[2], "/lol/league/v4/entries/by-puuid/") || !strings.Contains(paths[3], "start=0&count=10") {
 		t.Fatalf("paths = %#v", paths)
 	}
 }
@@ -153,6 +165,68 @@ func TestHandlerRendersEmptyAndSuccessfulSearch(t *testing.T) {
 		if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), tc.want) {
 			t.Fatalf("GET %s: status=%d body=%q, want %q", tc.target, rr.Code, rr.Body.String(), tc.want)
 		}
+	}
+}
+
+func TestHandlerCachesCaseInsensitivelyAndPreservesSnapshotOnRefreshFailure(t *testing.T) {
+	tmpl := template.Must(template.New("layout").Parse(`{{define "layout"}}{{.Error}}|{{.LastUpdatedLabel}}|{{if .Profile}}{{.Profile.GameName}}{{end}}|{{len .Matches}}{{end}}`))
+	searcher := &controlledSearcher{}
+	clock := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
+	app := &App{
+		Templates: tmpl,
+		Searcher:  searcher,
+		Cache:     NewSearchCache(),
+		Now:       func() time.Time { return clock },
+	}
+
+	request := func(target string) string {
+		rr := httptest.NewRecorder()
+		app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, target, nil))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET %s: status=%d", target, rr.Code)
+		}
+		return rr.Body.String()
+	}
+
+	if body := request("/?q=faker%23kr1&region=kr"); body != "|Updated just now|Faker|1" || searcher.calls != 1 {
+		t.Fatalf("cache miss: body=%q calls=%d", body, searcher.calls)
+	}
+	if body := request("/?q=Faker%23KR1&region=kr"); body != "|Updated just now|Faker|1" || searcher.calls != 1 {
+		t.Fatalf("case-insensitive hit: body=%q calls=%d", body, searcher.calls)
+	}
+
+	clock = clock.Add(5 * time.Minute)
+	searcher.err = errors.New("Riot API rate limit reached.")
+	if body := request("/?q=Faker%23KR1&region=kr&refresh=1"); body != "Riot API rate limit reached.|Updated 5 minutes ago|Faker|1" || searcher.calls != 2 {
+		t.Fatalf("failed refresh: body=%q calls=%d", body, searcher.calls)
+	}
+	if body := request("/?q=FAKER%23KR1&region=kr"); body != "|Updated 5 minutes ago|Faker|1" || searcher.calls != 2 {
+		t.Fatalf("preserved hit: body=%q calls=%d", body, searcher.calls)
+	}
+}
+
+func TestHandlerSuccessfulRefreshReplacesCachedSnapshot(t *testing.T) {
+	tmpl := template.Must(template.New("layout").Parse(`{{define "layout"}}{{.LastUpdatedLabel}}|{{.Profile.GameName}}{{end}}`))
+	searcher := &controlledSearcher{profileName: "Old"}
+	clock := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
+	app := &App{Templates: tmpl, Searcher: searcher, Cache: NewSearchCache(), Now: func() time.Time { return clock }}
+
+	request := func(target string) string {
+		rr := httptest.NewRecorder()
+		app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, target, nil))
+		return rr.Body.String()
+	}
+	if body := request("/?q=Faker%23KR1&region=kr"); body != "Updated just now|Old" {
+		t.Fatalf("initial body = %q", body)
+	}
+	clock = clock.Add(5 * time.Minute)
+	searcher.profileName = "Fresh"
+	if body := request("/?q=Faker%23KR1&region=kr&refresh=1"); body != "Updated just now|Fresh" || searcher.calls != 2 {
+		t.Fatalf("refresh: body=%q calls=%d", body, searcher.calls)
+	}
+	clock = clock.Add(time.Minute)
+	if body := request("/?q=faker%23kr1&region=kr"); body != "Updated 1 minute ago|Fresh" || searcher.calls != 2 {
+		t.Fatalf("replacement hit: body=%q calls=%d", body, searcher.calls)
 	}
 }
 
@@ -301,6 +375,24 @@ type stubSearcher struct{}
 
 func (stubSearcher) Search(_ context.Context, riotID, region string, _ time.Time) (*ProfileView, []MatchView, error) {
 	return &ProfileView{GameName: "Faker", TagLine: "KR1"}, []MatchView{{MatchID: "KR_1", CS: 123, Gold: 456}}, nil
+}
+
+type controlledSearcher struct {
+	calls       int
+	err         error
+	profileName string
+}
+
+func (s *controlledSearcher) Search(_ context.Context, _, _ string, _ time.Time) (*ProfileView, []MatchView, error) {
+	s.calls++
+	if s.err != nil {
+		return nil, nil, s.err
+	}
+	name := s.profileName
+	if name == "" {
+		name = "Faker"
+	}
+	return &ProfileView{GameName: name, TagLine: "KR1"}, []MatchView{{MatchID: "KR_1"}}, nil
 }
 
 type stubMatchLoader struct{}
