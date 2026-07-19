@@ -50,9 +50,9 @@
       <a class="riot-id" href="/?q={{.RiotID}}&amp;region={{.Region}}">{{.RiotID}}</a>
     </div>
     <div class="player-stats">
-      <div><span class="lbl">KDA</span>{{.Kills}} / {{.Deaths}} / {{.Assists}}</div>
-      <div><span class="lbl">CS</span>{{.CS}}</div>
-      <div><span class="lbl">Gold</span>{{.Gold}}</div>
+      <div class="col-kda"><span class="lbl">KDA</span>{{.Kills}} / {{.Deaths}} / {{.Assists}}</div>
+      <div class="col-cs"><span class="lbl">CS</span>{{.CS}}</div>
+      <div class="col-gold"><span class="lbl">Gold</span>{{.Gold}}</div>
       <div class="dmg-wrap">
         <div class="dmg-bar-track"><div class="dmg-bar-fill" style="width:{{.DamagePercent}}%"></div></div>
         <span>{{.Damage}}</span>

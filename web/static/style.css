@@ -356,14 +356,17 @@ main {
 .player-row .champ-icon-img { width: 30px; height: 30px; border-radius: 8px; }
 .player-row .spell-icon-img { width: 12px; height: 12px; }
 
-.player-cell { display: flex; align-items: center; gap: 8px; min-width: 150px; max-width: 220px; flex: 1 1 auto; }
+.player-cell { display: flex; align-items: center; gap: 8px; width: 220px; min-width: 0; flex: 0 0 220px; }
 .riot-id {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
   font-weight: 600;
   font-size: 13.5px;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
 }
 .riot-id:hover { text-decoration: underline; }
 
@@ -382,6 +385,10 @@ main {
   font-size: 12.5px;
   align-items: center;
 }
+
+.col-kda { width: 76px; flex: 0 0 auto; }
+.col-cs { width: 34px; flex: 0 0 auto; }
+.col-gold { width: 52px; flex: 0 0 auto; }
 
 .player-stats .lbl {
   display: block;
