@@ -20,6 +20,36 @@ func TestParseRiotID(t *testing.T) {
 	}
 }
 
+func TestNewRiotClientRequestsTwentyMatches(t *testing.T) {
+	client := NewRiotClient("key")
+	if got := client.MatchCount; got != 20 {
+		t.Fatalf("MatchCount = %d, want 20", got)
+	}
+	if client.MinRequestInterval < 50*time.Millisecond {
+		t.Fatalf("MinRequestInterval = %v, want pacing below 20 requests/second", client.MinRequestInterval)
+	}
+}
+
+func TestRequestPacingIsSharedPerHost(t *testing.T) {
+	client := &RiotClient{MinRequestInterval: 15 * time.Millisecond}
+	if err := client.waitForRequestSlot(context.Background(), "americas.api.riotgames.com"); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if err := client.waitForRequestSlot(context.Background(), "americas.api.riotgames.com"); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed < 10*time.Millisecond {
+		t.Fatalf("same-host request waited only %v", elapsed)
+	}
+	if err := client.waitForRequestSlot(context.Background(), "europe.api.riotgames.com"); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.nextRequest) != 2 {
+		t.Fatalf("paced hosts = %d, want independent slots for two hosts", len(client.nextRequest))
+	}
+}
+
 func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -150,7 +180,7 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 		t.Fatalf("team 2 totals = %#v", detail.Team2)
 	}
 	p := detail.Team1.Players[0]
-	if p.RiotID != "Hide on bush#KR1" || p.ChampionName != "Ahri" || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || p.DamagePercent != 59 || !p.IsHighlighted {
+	if p.RiotID != "Hide on bush#KR1" || p.Region != "kr" || p.ChampionName != "Ahri" || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || p.DamagePercent != 59 || !p.IsHighlighted {
 		t.Fatalf("player = %#v", p)
 	}
 	if detail.Team2.Players[0].DamagePercent != 100 {
@@ -190,7 +220,7 @@ func TestMatchDetailMatchesRiotIDCaseInsensitively(t *testing.T) {
 		{TeamID: 200, Win: true, RiotIDGameName: "Hide on bush", RiotIDTagLine: "KR1"},
 	}
 
-	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "hide on bush#kr1", time.Now())
+	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "hide on bush#kr1", "kr", time.Now())
 	if len(detail.Team1.Players) != 1 || detail.Team1.Players[0].RiotID != "Hide on bush#KR1" {
 		t.Fatalf("Team1 = %#v, want searched player's team 200", detail.Team1)
 	}
@@ -205,7 +235,7 @@ func TestMatchDetailDamagePercentIsZeroWhenAllDamageIsZero(t *testing.T) {
 		{TeamID: 100, RiotIDGameName: "One", RiotIDTagLine: "NA1"},
 		{TeamID: 200, RiotIDGameName: "Two", RiotIDTagLine: "NA1"},
 	}
-	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "", time.Now())
+	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "", "na1", time.Now())
 	if detail.Team1.Players[0].DamagePercent != 0 || detail.Team2.Players[0].DamagePercent != 0 {
 		t.Fatalf("zero-damage percents = %d, %d", detail.Team1.Players[0].DamagePercent, detail.Team2.Players[0].DamagePercent)
 	}
@@ -236,7 +266,7 @@ func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"MATCH HISTORY", "Back to Match History", "Faker#KR1"} {
+	for _, want := range []string{"MATCH HISTORY", "Back to Match History", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
 		}
@@ -267,7 +297,7 @@ func (stubSearcher) Search(_ context.Context, riotID, region string, _ time.Time
 type stubMatchLoader struct{}
 
 func (stubMatchLoader) MatchDetail(_ context.Context, matchID, me string, _ time.Time) (*MatchDetailView, error) {
-	return &MatchDetailView{MatchID: matchID, Team1: TeamView{Players: []PlayerStatsView{{RiotID: me}}}}, nil
+	return &MatchDetailView{MatchID: matchID, Team1: TeamView{Players: []PlayerStatsView{{RiotID: me, Region: "kr"}}}}, nil
 }
 
 func newTestRiotClient(baseURL string) *RiotClient {

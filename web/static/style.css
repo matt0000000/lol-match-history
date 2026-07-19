@@ -365,17 +365,18 @@ main {
 
 .team tr:last-child td { border-bottom: none; }
 
-.player-cell {
+.player-inner {
   display: flex;
   align-items: center;
   gap: 8px;
   white-space: nowrap;
 }
 
-.player-cell .champ-icon { width: 26px; height: 26px; }
-.player-cell .spell-icon { width: 11px; height: 11px; }
+.player-inner .champ-icon { width: 26px; height: 26px; }
+.player-inner .spell-icon { width: 11px; height: 11px; }
 
 .riot-id { font-weight: 600; }
+.riot-id:hover { text-decoration: underline; }
 
 tr.me {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -394,11 +395,12 @@ tr.me .riot-id::after {
   white-space: nowrap;
 }
 
-.dmg-cell {
+.dmg-cell { min-width: 120px; }
+
+.dmg-inner {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 120px;
 }
 
 .dmg-bar-track {
@@ -423,15 +425,15 @@ tr.me .riot-id::after {
   text-align: right;
 }
 
-.items-cell {
+.items-inner {
   display: flex;
   gap: 2px;
 }
 
-.items-cell .item-slot { width: 19px; height: 19px; }
+.items-inner .item-slot { width: 19px; height: 19px; }
 
 @media (max-width: 640px) {
   .team table { font-size: 11px; }
-  .player-cell .champ-icon { width: 22px; height: 22px; }
+  .player-inner .champ-icon { width: 22px; height: 22px; }
   .dmg-cell { min-width: 90px; }
 }

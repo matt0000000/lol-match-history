@@ -79,6 +79,7 @@ type TeamView struct {
 
 type PlayerStatsView struct {
 	RiotID                string
+	Region                string
 	ChampionName          string
 	ChampionIconURL       string
 	Kills                 int
@@ -187,13 +188,16 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 type RiotClient struct {
-	APIKey          string
-	HTTPClient      *http.Client
-	RegionalBaseURL func(string) string
-	PlatformBaseURL func(string) string
-	DataDragonBase  string
-	DataDragonVer   string
-	MatchCount      int
+	APIKey             string
+	HTTPClient         *http.Client
+	RegionalBaseURL    func(string) string
+	PlatformBaseURL    func(string) string
+	DataDragonBase     string
+	DataDragonVer      string
+	MatchCount         int
+	MinRequestInterval time.Duration
+	requestMu          sync.Mutex
+	nextRequest        map[string]time.Time
 }
 
 type accountDTO struct {
@@ -261,7 +265,7 @@ func (c *RiotClient) MatchDetail(ctx context.Context, matchID, me string, now ti
 	if dto.Metadata.MatchID == "" {
 		dto.Metadata.MatchID = matchID
 	}
-	view := c.matchDetailView(dto, me, now)
+	view := c.matchDetailView(dto, me, region, now)
 	view.Query = strings.TrimSpace(me)
 	view.Region = region
 	return &view, nil
@@ -277,9 +281,11 @@ func NewRiotClient(apiKey string) *RiotClient {
 		PlatformBaseURL: func(region string) string {
 			return "https://" + region + ".api.riotgames.com"
 		},
-		DataDragonBase: "https://ddragon.leagueoflegends.com",
-		DataDragonVer:  defaultDataDragonVersion,
-		MatchCount:     10,
+		DataDragonBase:     "https://ddragon.leagueoflegends.com",
+		DataDragonVer:      defaultDataDragonVersion,
+		MatchCount:         20,
+		MinRequestInterval: 60 * time.Millisecond,
+		nextRequest:        make(map[string]time.Time),
 	}
 }
 
@@ -383,6 +389,9 @@ func (c *RiotClient) getJSON(ctx context.Context, endpoint string, dst any) erro
 		return errors.New("Riot services are temporarily unavailable.")
 	}
 	req.Header.Set("X-Riot-Token", c.APIKey)
+	if err := c.waitForRequestSlot(ctx, req.URL.Host); err != nil {
+		return err
+	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -410,6 +419,36 @@ func (c *RiotClient) getJSON(ctx context.Context, endpoint string, dst any) erro
 		return errors.New("Riot services returned an unexpected response.")
 	}
 	return nil
+}
+
+func (c *RiotClient) waitForRequestSlot(ctx context.Context, host string) error {
+	if c.MinRequestInterval <= 0 {
+		return nil
+	}
+	now := time.Now()
+	c.requestMu.Lock()
+	if c.nextRequest == nil {
+		c.nextRequest = make(map[string]time.Time)
+	}
+	slot := c.nextRequest[host]
+	if slot.Before(now) {
+		slot = now
+	}
+	c.nextRequest[host] = slot.Add(c.MinRequestInterval)
+	c.requestMu.Unlock()
+
+	wait := time.Until(slot)
+	if wait <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time) MatchView {
@@ -451,7 +490,7 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 	return view
 }
 
-func (c *RiotClient) matchDetailView(dto matchDTO, me string, now time.Time) MatchDetailView {
+func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.Time) MatchDetailView {
 	version := majorMinorVersion(dto.Info.GameVersion)
 	if version == "" {
 		version = c.DataDragonVer
@@ -473,7 +512,7 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me string, now time.Time) Mat
 		TimeAgoLabel:  timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
 	}
 	for _, p := range dto.Info.Participants {
-		player := c.playerStatsView(version, p, me, maxDamage)
+		player := c.playerStatsView(version, p, me, region, maxDamage)
 		if p.TeamID == team1ID {
 			if len(view.Team1.Players) == 0 {
 				view.Team1.Win = p.Win
@@ -497,7 +536,7 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me string, now time.Time) Mat
 	return view
 }
 
-func (c *RiotClient) playerStatsView(version string, p participantDTO, me string, maxDamage int) PlayerStatsView {
+func (c *RiotClient) playerStatsView(version string, p participantDTO, me, region string, maxDamage int) PlayerStatsView {
 	damagePercent := 0
 	if maxDamage > 0 {
 		damagePercent = int(math.Round(float64(p.TotalDamageDealtToChampions) * 100 / float64(maxDamage)))
@@ -510,6 +549,7 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, me string
 	}
 	view := PlayerStatsView{
 		RiotID:                displayRiotID(p),
+		Region:                region,
 		ChampionName:          p.ChampionName,
 		ChampionIconURL:       c.championURL(version, p.ChampionName),
 		Kills:                 p.Kills,

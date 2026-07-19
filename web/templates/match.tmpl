@@ -56,21 +56,27 @@
       {{range .Players}}
       <tr{{if .IsHighlighted}} class="me"{{end}}>
         <td class="player-cell">
-          <img class="champ-icon" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
-          <div class="spell-col">
-            {{range .SummonerSpellIconURLs}}<img class="spell-icon" src="{{.}}" alt="">{{end}}
+          <div class="player-inner">
+            <img class="champ-icon" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
+            <div class="spell-col">
+              {{range .SummonerSpellIconURLs}}<img class="spell-icon" src="{{.}}" alt="">{{end}}
+            </div>
+            <a class="riot-id" href="/?q={{.RiotID}}&amp;region={{.Region}}">{{.RiotID}}</a>
           </div>
-          <span class="riot-id">{{.RiotID}}</span>
         </td>
         <td class="num-cell">{{.Kills}} / {{.Deaths}} / {{.Assists}}</td>
         <td class="num-cell">{{.CS}}</td>
         <td class="num-cell">{{.Gold}}</td>
         <td class="dmg-cell">
-          <div class="dmg-bar-track"><div class="dmg-bar-fill" style="width:{{.DamagePercent}}%"></div></div>
-          <span class="dmg-num">{{.Damage}}</span>
+          <div class="dmg-inner">
+            <div class="dmg-bar-track"><div class="dmg-bar-fill" style="width:{{.DamagePercent}}%"></div></div>
+            <span class="dmg-num">{{.Damage}}</span>
+          </div>
         </td>
         <td class="items-cell">
-          {{range .ItemIconURLs}}{{if .}}<img class="item-slot" src="{{.}}" alt="">{{else}}<span class="item-slot empty"></span>{{end}}{{end}}
+          <div class="items-inner">
+            {{range .ItemIconURLs}}{{if .}}<img class="item-slot" src="{{.}}" alt="">{{else}}<span class="item-slot empty"></span>{{end}}{{end}}
+          </div>
         </td>
       </tr>
       {{end}}
