@@ -356,8 +356,15 @@ main {
 .player-row .champ-icon-img { width: 30px; height: 30px; border-radius: 8px; }
 .player-row .spell-icon-img { width: 12px; height: 12px; }
 
-.player-cell { display: flex; align-items: center; gap: 8px; min-width: 150px; flex: 1; }
-.riot-id { font-weight: 600; font-size: 13.5px; }
+.player-cell { display: flex; align-items: center; gap: 8px; min-width: 150px; max-width: 220px; flex: 1 1 auto; }
+.riot-id {
+  font-weight: 600;
+  font-size: 13.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .riot-id:hover { text-decoration: underline; }
 
 .player-row.me { background: color-mix(in srgb, var(--accent) 8%, transparent); }
