@@ -1,7 +1,9 @@
 {{define "topbar"}}
 <header>
   <div class="header-inner">
-    <a class="wordmark" href="/">MATCH HISTORY</a>
+    <div class="header-top">
+      <a class="wordmark" href="/">Match History</a>
+    </div>
     <form class="search-form" method="get" action="/">
       <select name="region">
         <option value="na1" {{if eq .Region "na1"}}selected{{end}}>NA</option>
