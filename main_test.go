@@ -10,6 +10,15 @@ import (
 	"time"
 )
 
+func TestRiotVerificationRoute(t *testing.T) {
+	app := &App{}
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/riot.txt", nil))
+	if rr.Code != http.StatusOK || rr.Body.String() != riotVerificationToken {
+		t.Fatalf("GET /riot.txt: status=%d body=%q, want %q", rr.Code, rr.Body.String(), riotVerificationToken)
+	}
+}
+
 func TestParseRiotID(t *testing.T) {
 	gameName, tagLine, err := parseRiotID("Hide on bush#KR1")
 	if err != nil || gameName != "Hide on bush" || tagLine != "KR1" {

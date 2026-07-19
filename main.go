@@ -21,6 +21,10 @@ import (
 
 const defaultDataDragonVersion = "16.14.1"
 
+// riotVerificationToken proves domain ownership for the Riot Developer Portal
+// API key application. Safe to remove once the application is approved.
+const riotVerificationToken = "78f3e35f-b152-4401-b2bb-1d2ffecdc690"
+
 //go:embed web/templates/*.tmpl web/static/*
 var webFiles embed.FS
 
@@ -115,9 +119,15 @@ func (a *App) Handler() http.Handler {
 	if a.StaticFS != nil {
 		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(a.StaticFS)))
 	}
+	mux.HandleFunc("GET /riot.txt", handleRiotVerification)
 	mux.HandleFunc("GET /match/{id}", a.handleMatchDetail)
 	mux.HandleFunc("GET /", a.handleIndex)
 	return mux
+}
+
+func handleRiotVerification(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte(riotVerificationToken))
 }
 
 func (a *App) handleMatchDetail(w http.ResponseWriter, r *http.Request) {
