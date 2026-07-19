@@ -172,12 +172,20 @@ type App struct {
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	if a.StaticFS != nil {
-		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(a.StaticFS)))
+		staticHandler := http.StripPrefix("/static/", http.FileServerFS(a.StaticFS))
+		mux.Handle("GET /static/", requireStaticRevalidation(staticHandler))
 	}
 	mux.HandleFunc("GET /riot.txt", handleRiotVerification)
 	mux.HandleFunc("GET /match/{id}", a.handleMatchDetail)
 	mux.HandleFunc("GET /", a.handleIndex)
 	return mux
+}
+
+func requireStaticRevalidation(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func handleRiotVerification(w http.ResponseWriter, r *http.Request) {

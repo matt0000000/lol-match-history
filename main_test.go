@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,25 @@ func TestRiotVerificationRoute(t *testing.T) {
 	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/riot.txt", nil))
 	if rr.Code != http.StatusOK || rr.Body.String() != riotVerificationToken {
 		t.Fatalf("GET /riot.txt: status=%d body=%q, want %q", rr.Code, rr.Body.String(), riotVerificationToken)
+	}
+}
+
+func TestStaticAssetsRequireRevalidation(t *testing.T) {
+	staticFiles, err := fs.Sub(webFiles, "web/static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{StaticFS: staticFiles}
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/static/style.css", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-cache, must-revalidate" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	if !strings.Contains(rr.Body.String(), ":root") {
+		t.Fatal("static response did not contain stylesheet")
 	}
 }
 
