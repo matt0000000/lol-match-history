@@ -1,0 +1,259 @@
+/* Match History — retro 2015-2018 Riot look, minimal & dependency-free */
+
+:root {
+  --navy: #0a1428;
+  --navy-light: #1e2328;
+  --gold: #c8aa6e;
+  --win-bg: #eef4fb;
+  --win-border: #4a7fc9;
+  --loss-bg: #fbeeee;
+  --loss-border: #c94a4a;
+  --text: #2a2a2a;
+  --muted: #6b6b6b;
+  --border: #dcdcdc;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: #f4f4f4;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.topbar {
+  background: var(--navy);
+  border-bottom: 3px solid var(--gold);
+}
+
+.topbar-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.brand {
+  color: var(--gold);
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 18px;
+}
+
+.search-form {
+  display: flex;
+  gap: 6px;
+}
+
+.search-form select,
+.search-form input,
+.search-form button {
+  font-size: 14px;
+  padding: 6px 8px;
+  border: 1px solid #333;
+  border-radius: 2px;
+}
+
+.search-form input {
+  width: 220px;
+}
+
+.search-form button {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--navy);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 16px 60px;
+}
+
+.error {
+  background: var(--loss-bg);
+  border: 1px solid var(--loss-border);
+  color: #8a2a2a;
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 14px;
+  margin-bottom: 20px;
+}
+
+.profile-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 4px;
+}
+
+.profile-name {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.profile-name .tagline {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 14px;
+}
+
+.profile-level {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.matches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.match {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--win-bg);
+  border-left: 6px solid var(--win-border);
+  border-radius: 3px;
+  padding: 10px 14px;
+  flex-wrap: wrap;
+}
+
+.match.loss {
+  background: var(--loss-bg);
+  border-left-color: var(--loss-border);
+}
+
+.match-meta {
+  width: 110px;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.match-meta .result {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 13px;
+}
+
+.match.win .result { color: var(--win-border); }
+.match.loss .result { color: var(--loss-border); }
+
+.match-meta .mode { color: var(--text); }
+.match-meta .time-ago,
+.match-meta .duration { color: var(--muted); }
+
+.match-champ {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.champ-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.spells {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spell-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+}
+
+.match-kda {
+  width: 90px;
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+}
+
+.match-items {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.item-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 2px;
+  background: #d8d8d8;
+  border: 1px solid #bbb;
+}
+
+.item-icon.empty {
+  display: inline-block;
+}
+
+.match-teams {
+  display: flex;
+  gap: 20px;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.team {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 130px;
+}
+
+.team li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 0;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.team li.me {
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.mini-champ {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+@media (max-width: 640px) {
+  .match-teams { display: none; }
+  .topbar-inner { flex-direction: column; align-items: stretch; }
+  .search-form { flex-wrap: wrap; }
+  .search-form input { width: 100%; }
+}

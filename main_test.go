@@ -1,0 +1,151 @@
+package main
+
+import (
+	"context"
+	"html/template"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestParseRiotID(t *testing.T) {
+	gameName, tagLine, err := parseRiotID("Hide on bush#KR1")
+	if err != nil || gameName != "Hide on bush" || tagLine != "KR1" {
+		t.Fatalf("parseRiotID() = %q, %q, %v", gameName, tagLine, err)
+	}
+	if _, _, err := parseRiotID("missing-tag"); err == nil {
+		t.Fatal("parseRiotID() accepted an ID without #tag")
+	}
+}
+
+func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.RequestURI())
+		if r.Header.Get("X-Riot-Token") != "test-key" {
+			t.Fatalf("X-Riot-Token = %q", r.Header.Get("X-Riot-Token"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/riot/account/v1/accounts/by-riot-id/"):
+			w.Write([]byte(`{"puuid":"player-puuid","gameName":"Hide on bush","tagLine":"KR1"}`))
+		case strings.HasPrefix(r.URL.Path, "/lol/summoner/v4/summoners/by-puuid/"):
+			w.Write([]byte(`{"profileIconId":4568,"summonerLevel":777}`))
+		case strings.HasSuffix(r.URL.Path, "/ids"):
+			w.Write([]byte(`["KR_1"]`))
+		case strings.HasSuffix(r.URL.Path, "/KR_1"):
+			w.Write([]byte(matchFixtureJSON))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestRiotClient(server.URL)
+	profile, matches, err := client.Search(context.Background(), "Hide on bush#KR1", "kr", time.UnixMilli(1_720_003_600_000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.GameName != "Hide on bush" || profile.SummonerLevel != 777 {
+		t.Fatalf("profile = %#v", profile)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("len(matches) = %d", len(matches))
+	}
+	m := matches[0]
+	if !m.Win || m.GameModeLabel != "Ranked Solo/Duo" || m.DurationLabel != "32m 14s" || m.TimeAgoLabel != "1 hour ago" {
+		t.Fatalf("match labels = %#v", m)
+	}
+	if m.ChampionName != "Ahri" || m.Kills != 10 || m.Deaths != 2 || m.Assists != 8 {
+		t.Fatalf("player stats = %#v", m)
+	}
+	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
+		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
+	}
+	if len(m.Team1) != 2 || !m.Team1[0].IsSearchedPlayer || m.Team1[0].RiotID != "Hide on bush#KR1" || len(m.Team2) != 1 {
+		t.Fatalf("teams = %#v / %#v", m.Team1, m.Team2)
+	}
+	if len(paths) != 4 || !strings.Contains(paths[0], "Hide%20on%20bush/KR1") || !strings.Contains(paths[2], "start=0&count=10") {
+		t.Fatalf("paths = %#v", paths)
+	}
+}
+
+func TestRiotClientMapsUpstreamErrors(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		want   string
+	}{
+		{http.StatusNotFound, "No player found"},
+		{http.StatusUnauthorized, "API key is invalid or expired"},
+		{http.StatusForbidden, "API key is invalid or expired"},
+		{http.StatusTooManyRequests, "rate limit"},
+	} {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Retry-After", "12")
+				w.WriteHeader(tc.status)
+			}))
+			defer s.Close()
+			client := newTestRiotClient(s.URL)
+			_, _, err := client.Search(context.Background(), "Faker#KR1", "kr", time.Now())
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestHandlerRendersEmptyAndSuccessfulSearch(t *testing.T) {
+	tmpl := template.Must(template.New("layout").Parse(`{{define "layout"}}{{.Query}}|{{.Region}}|{{.Error}}{{if .Profile}}|{{.Profile.GameName}}|{{len .Matches}}{{end}}{{end}}`))
+	app := &App{Templates: tmpl, Searcher: stubSearcher{}}
+
+	for _, tc := range []struct {
+		target, want string
+	}{
+		{"/", "|na1|"},
+		{"/?q=Faker%23KR1&region=kr", "Faker#KR1|kr||Faker|1"},
+		{"/?q=bad&region=kr", "bad|kr|Enter a Riot ID"},
+		{"/?q=Faker%23KR1&region=bad", "Faker#KR1|bad|Choose a supported region"},
+	} {
+		rr := httptest.NewRecorder()
+		app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, tc.target, nil))
+		if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), tc.want) {
+			t.Fatalf("GET %s: status=%d body=%q, want %q", tc.target, rr.Code, rr.Body.String(), tc.want)
+		}
+	}
+}
+
+type stubSearcher struct{}
+
+func (stubSearcher) Search(_ context.Context, riotID, region string, _ time.Time) (*ProfileView, []MatchView, error) {
+	return &ProfileView{GameName: "Faker", TagLine: "KR1"}, []MatchView{{MatchID: "KR_1"}}, nil
+}
+
+func newTestRiotClient(baseURL string) *RiotClient {
+	return &RiotClient{
+		APIKey:          "test-key",
+		HTTPClient:      http.DefaultClient,
+		RegionalBaseURL: func(string) string { return baseURL },
+		PlatformBaseURL: func(string) string { return baseURL },
+		DataDragonBase:  "https://ddragon.test",
+		DataDragonVer:   "16.14.1",
+		MatchCount:      10,
+	}
+}
+
+const matchFixtureJSON = `{
+  "metadata":{"matchId":"KR_1"},
+  "info":{
+    "gameCreation":1720000000000,
+    "gameDuration":1934,
+    "gameVersion":"16.14.1.123",
+    "queueId":420,
+    "participants":[
+      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","kills":10,"deaths":2,"assists":8,"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
+      {"puuid":"ally","teamId":100,"championName":"LeeSin","riotIdGameName":"Ally","riotIdTagline":"KR1"},
+      {"puuid":"enemy","teamId":200,"championName":"Garen","riotIdGameName":"Enemy","riotIdTagline":"KR1"}
+    ]
+  }
+}`

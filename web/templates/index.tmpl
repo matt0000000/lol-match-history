@@ -1,0 +1,52 @@
+{{define "content"}}
+{{if .Error}}
+<div class="error">{{.Error}}</div>
+{{end}}
+
+{{if .Profile}}
+<section class="profile">
+  <img class="profile-icon" src="{{.Profile.ProfileIconURL}}" alt="">
+  <div class="profile-info">
+    <div class="profile-name">{{.Profile.GameName}}<span class="tagline">#{{.Profile.TagLine}}</span></div>
+    <div class="profile-level">Level {{.Profile.SummonerLevel}}</div>
+  </div>
+</section>
+
+<section class="matches">
+{{range .Matches}}
+  <article class="match {{if .Win}}win{{else}}loss{{end}}">
+    <div class="match-meta">
+      <div class="result">{{if .Win}}Victory{{else}}Defeat{{end}}</div>
+      <div class="mode">{{.GameModeLabel}}</div>
+      <div class="time-ago">{{.TimeAgoLabel}}</div>
+      <div class="duration">{{.DurationLabel}}</div>
+    </div>
+
+    <div class="match-champ">
+      <img class="champ-icon" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
+      <div class="spells">
+        {{range .SummonerSpellIconURLs}}<img class="spell-icon" src="{{.}}" alt="">{{end}}
+      </div>
+    </div>
+
+    <div class="match-kda">
+      <div class="kda-numbers">{{.Kills}} / {{.Deaths}} / {{.Assists}}</div>
+    </div>
+
+    <div class="match-items">
+      {{range .ItemIconURLs}}{{if .}}<img class="item-icon" src="{{.}}" alt="">{{else}}<span class="item-icon empty"></span>{{end}}{{end}}
+    </div>
+
+    <div class="match-teams">
+      <ul class="team team1">
+        {{range .Team1}}<li{{if .IsSearchedPlayer}} class="me"{{end}}><img class="mini-champ" src="{{.ChampionIconURL}}" alt="">{{.RiotID}}</li>{{end}}
+      </ul>
+      <ul class="team team2">
+        {{range .Team2}}<li{{if .IsSearchedPlayer}} class="me"{{end}}><img class="mini-champ" src="{{.ChampionIconURL}}" alt="">{{.RiotID}}</li>{{end}}
+      </ul>
+    </div>
+  </article>
+{{end}}
+</section>
+{{end}}
+{{end}}
