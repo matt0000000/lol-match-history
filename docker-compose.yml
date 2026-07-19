@@ -1,0 +1,8 @@
+services:
+  lol-history:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - RIOT_API_KEY=${RIOT_API_KEY}
+    restart: unless-stopped
