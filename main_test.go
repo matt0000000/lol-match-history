@@ -118,6 +118,9 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
 	}
+	if _, err := client.MatchDetail(context.Background(), "KR_1", "Hide on bush#KR1", time.Now()); err != nil {
+		t.Fatalf("cached MatchDetail failed: %v", err)
+	}
 	if len(paths) != 5 || !strings.Contains(paths[0], "Hide%20on%20bush/KR1") || !strings.Contains(paths[2], "/lol/league/v4/entries/by-puuid/") || !strings.Contains(paths[3], "start=0&count=10") {
 		t.Fatalf("paths = %#v", paths)
 	}
@@ -271,6 +274,60 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	}
 	if len(p.ItemIconURLs) != 7 || p.ItemIconURLs[2] != "" || len(p.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", p.ItemIconURLs, p.SummonerSpellIconURLs)
+	}
+}
+
+func TestMatchDetailCachesRawMatchButRebuildsViewerSpecificView(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(matchFixtureJSON))
+	}))
+	defer server.Close()
+	client := newTestRiotClient(server.URL)
+
+	first, err := client.MatchDetail(context.Background(), "KR_1", "Hide on bush#KR1", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := client.MatchDetail(context.Background(), "kr_1", "Enemy#KR1", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 {
+		t.Fatalf("Match-V5 requests = %d, want 1", requests)
+	}
+	if first.Team1.Players[0].RiotID != "Hide on bush#KR1" || !first.Team1.Players[0].IsHighlighted {
+		t.Fatalf("first viewer Team1 = %#v", first.Team1)
+	}
+	if second.Team1.Players[0].RiotID != "Enemy#KR1" || !second.Team1.Players[0].IsHighlighted {
+		t.Fatalf("second viewer Team1 = %#v", second.Team1)
+	}
+}
+
+func TestFailedMatchDetailIsNotCached(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(matchFixtureJSON))
+	}))
+	defer server.Close()
+	client := newTestRiotClient(server.URL)
+
+	if _, err := client.MatchDetail(context.Background(), "KR_1", "", time.Now()); err == nil {
+		t.Fatal("first MatchDetail unexpectedly succeeded")
+	}
+	if _, err := client.MatchDetail(context.Background(), "KR_1", "", time.Now()); err != nil {
+		t.Fatalf("second MatchDetail failed: %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("Match-V5 requests = %d, want 2", requests)
 	}
 }
 

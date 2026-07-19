@@ -292,6 +292,8 @@ type RiotClient struct {
 	MinRequestInterval time.Duration
 	requestMu          sync.Mutex
 	nextRequest        map[string]time.Time
+	matchCacheMu       sync.RWMutex
+	matchCache         map[string]matchDTO
 }
 
 type accountDTO struct {
@@ -361,12 +363,9 @@ func (c *RiotClient) MatchDetail(ctx context.Context, matchID, me string, now ti
 		return nil, err
 	}
 	var dto matchDTO
-	endpoint := c.RegionalBaseURL(region) + "/lol/match/v5/matches/" + url.PathEscape(matchID)
-	if err := c.getJSON(ctx, endpoint, &dto); err != nil {
+	dto, err = c.lookupMatchDTO(ctx, region, matchID)
+	if err != nil {
 		return nil, err
-	}
-	if dto.Metadata.MatchID == "" {
-		dto.Metadata.MatchID = matchID
 	}
 	view := c.matchDetailView(dto, me, region, now)
 	view.Query = strings.TrimSpace(me)
@@ -389,6 +388,7 @@ func NewRiotClient(apiKey string) *RiotClient {
 		MatchCount:         20,
 		MinRequestInterval: 60 * time.Millisecond,
 		nextRequest:        make(map[string]time.Time),
+		matchCache:         make(map[string]matchDTO),
 	}
 }
 
@@ -507,9 +507,8 @@ func (c *RiotClient) lookupMatches(ctx context.Context, region, puuid string, id
 			case <-ctx.Done():
 				return
 			}
-			var dto matchDTO
-			endpoint := c.RegionalBaseURL(region) + "/lol/match/v5/matches/" + url.PathEscape(id)
-			if err := c.getJSON(ctx, endpoint, &dto); err != nil {
+			dto, err := c.lookupMatchDTO(ctx, region, id)
+			if err != nil {
 				errMu.Lock()
 				if firstErr == nil {
 					firstErr = err
@@ -523,6 +522,31 @@ func (c *RiotClient) lookupMatches(ctx context.Context, region, puuid string, id
 	}
 	wg.Wait()
 	return views, firstErr
+}
+
+func (c *RiotClient) lookupMatchDTO(ctx context.Context, region, matchID string) (matchDTO, error) {
+	key := strings.ToUpper(strings.TrimSpace(matchID))
+	c.matchCacheMu.RLock()
+	dto, ok := c.matchCache[key]
+	c.matchCacheMu.RUnlock()
+	if ok {
+		return dto, nil
+	}
+
+	endpoint := c.RegionalBaseURL(region) + "/lol/match/v5/matches/" + url.PathEscape(matchID)
+	if err := c.getJSON(ctx, endpoint, &dto); err != nil {
+		return matchDTO{}, err
+	}
+	if dto.Metadata.MatchID == "" {
+		dto.Metadata.MatchID = matchID
+	}
+	c.matchCacheMu.Lock()
+	if c.matchCache == nil {
+		c.matchCache = make(map[string]matchDTO)
+	}
+	c.matchCache[key] = dto
+	c.matchCacheMu.Unlock()
+	return dto, nil
 }
 
 func (c *RiotClient) getJSON(ctx context.Context, endpoint string, dst any) error {
