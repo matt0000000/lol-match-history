@@ -1,13 +1,4 @@
-{{define "layout"}}
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Match History{{if .Profile}} — {{.Profile.GameName}}#{{.Profile.TagLine}}{{end}}</title>
-<link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
+{{define "topbar"}}
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="/">MATCH HISTORY</a>
@@ -30,6 +21,19 @@
     </form>
   </div>
 </header>
+{{end}}
+
+{{define "layout"}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match History{{if .Profile}} — {{.Profile.GameName}}#{{.Profile.TagLine}}{{end}}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{{template "topbar" .}}
 <main>
 {{template "content" .}}
 </main>

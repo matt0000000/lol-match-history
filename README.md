@@ -11,7 +11,7 @@ cp .env.example .env   # edit .env and paste your key in
 docker compose up --build
 ```
 
-Open <http://localhost:8080> and search using a Riot ID such as `Name#Tag`.
+Open <http://localhost:8080> and search using a Riot ID such as `Name#Tag`. Click any match row for the full scoreboard (every player's KDA, CS, gold, damage, and items).
 
 Development keys expire every 24 hours. When Riot reports that the key is invalid or expired, generate another key, update `.env`, and run `docker compose up --build` again (or `docker compose restart` if you only changed the key and not the code).
 

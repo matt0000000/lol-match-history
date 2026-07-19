@@ -136,6 +136,12 @@ main {
   border-radius: 3px;
   padding: 10px 14px;
   flex-wrap: wrap;
+  cursor: pointer;
+  transition: filter 0.1s ease;
+}
+
+.match:hover {
+  filter: brightness(0.96);
 }
 
 .match.loss {
@@ -256,4 +262,130 @@ main {
   .topbar-inner { flex-direction: column; align-items: stretch; }
   .search-form { flex-wrap: wrap; }
   .search-form input { width: 100%; }
+}
+
+/* Match detail page */
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 16px;
+  color: var(--navy);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.detail-meta {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.detail-meta .mode {
+  font-weight: 700;
+}
+
+.detail-meta .duration,
+.detail-meta .time-ago {
+  color: var(--muted);
+}
+
+.scoreboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.team-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.team-table caption {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 13px;
+  color: #fff;
+  background: var(--win-border);
+}
+
+.team-table.loss caption {
+  background: var(--loss-border);
+}
+
+.team-table th {
+  text-align: left;
+  padding: 6px 10px;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.team-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+}
+
+.team-table tr:last-child td {
+  border-bottom: none;
+}
+
+.team-table tr.me {
+  background: #fff8e6;
+  font-weight: 700;
+}
+
+.player-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.champ-icon-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.spells-sm {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.spell-icon-sm {
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+}
+
+.items-cell {
+  display: flex;
+  gap: 2px;
+}
+
+.item-icon-sm {
+  width: 20px;
+  height: 20px;
+  border-radius: 2px;
+  background: #d8d8d8;
+  border: 1px solid #bbb;
+}
+
+@media (max-width: 640px) {
+  .team-table { font-size: 11px; }
+  .champ-icon-sm { width: 22px; height: 22px; }
 }

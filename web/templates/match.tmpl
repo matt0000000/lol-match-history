@@ -1,0 +1,68 @@
+{{define "matchLayout"}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match Detail{{if .GameModeLabel}} — {{.GameModeLabel}}{{end}}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{{template "topbar" .}}
+<main>
+{{template "matchContent" .}}
+</main>
+</body>
+</html>
+{{end}}
+
+{{define "matchContent"}}
+<a class="back-link" href="/?q={{.Query}}&amp;region={{.Region}}">&larr; Back to Match History</a>
+
+{{if .Error}}
+<div class="error">{{.Error}}</div>
+{{else}}
+<div class="detail-meta">
+  <span class="mode">{{.GameModeLabel}}</span>
+  <span class="duration">{{.DurationLabel}}</span>
+  <span class="time-ago">{{.TimeAgoLabel}}</span>
+</div>
+
+<div class="scoreboard">
+  {{template "teamTable" .Team1}}
+  {{template "teamTable" .Team2}}
+</div>
+{{end}}
+{{end}}
+
+{{define "teamTable"}}
+<table class="team-table {{if .Win}}win{{else}}loss{{end}}">
+  <caption>{{if .Win}}Victory{{else}}Defeat{{end}}</caption>
+  <thead>
+    <tr>
+      <th class="col-player">Player</th>
+      <th>KDA</th>
+      <th>CS</th>
+      <th>Gold</th>
+      <th>Damage</th>
+      <th class="col-items">Items</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Players}}
+    <tr{{if .IsHighlighted}} class="me"{{end}}>
+      <td class="player-cell">
+        <img class="champ-icon-sm" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
+        <span class="spells-sm">{{range .SummonerSpellIconURLs}}<img class="spell-icon-sm" src="{{.}}" alt="">{{end}}</span>
+        <span class="riot-id">{{.RiotID}}</span>
+      </td>
+      <td>{{.Kills}} / {{.Deaths}} / {{.Assists}}</td>
+      <td>{{.CS}}</td>
+      <td>{{.Gold}}</td>
+      <td>{{.Damage}}</td>
+      <td class="items-cell">{{range .ItemIconURLs}}{{if .}}<img class="item-icon-sm" src="{{.}}" alt="">{{else}}<span class="item-icon-sm empty"></span>{{end}}{{end}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

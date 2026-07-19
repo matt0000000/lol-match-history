@@ -14,7 +14,7 @@
 
 <section class="matches">
 {{range .Matches}}
-  <article class="match {{if .Win}}win{{else}}loss{{end}}">
+  <a class="match {{if .Win}}win{{else}}loss{{end}}" href="/match/{{.MatchID}}?me={{$.Query}}">
     <div class="match-meta">
       <div class="result">{{if .Win}}Victory{{else}}Defeat{{end}}</div>
       <div class="mode">{{.GameModeLabel}}</div>
@@ -45,7 +45,7 @@
         {{range .Team2}}<li{{if .IsSearchedPlayer}} class="me"{{end}}><img class="mini-champ" src="{{.ChampionIconURL}}" alt="">{{.RiotID}}</li>{{end}}
       </ul>
     </div>
-  </article>
+  </a>
 {{end}}
 </section>
 {{end}}

@@ -117,10 +117,121 @@ func TestHandlerRendersEmptyAndSuccessfulSearch(t *testing.T) {
 	}
 }
 
+func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
+	var requestURI string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestURI = r.URL.RequestURI()
+		if r.Header.Get("X-Riot-Token") != "test-key" {
+			t.Fatalf("X-Riot-Token = %q", r.Header.Get("X-Riot-Token"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(matchFixtureJSON))
+	}))
+	defer server.Close()
+
+	client := newTestRiotClient(server.URL)
+	detail, err := client.MatchDetail(context.Background(), "KR_1", "Hide on bush#KR1", time.UnixMilli(1_720_003_600_000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requestURI != "/lol/match/v5/matches/KR_1" {
+		t.Fatalf("request URI = %q", requestURI)
+	}
+	if detail.MatchID != "KR_1" || detail.GameModeLabel != "Ranked Solo/Duo" || detail.DurationLabel != "32m 14s" || detail.TimeAgoLabel != "1 hour ago" {
+		t.Fatalf("detail labels = %#v", detail)
+	}
+	if !detail.Team1.Win || detail.Team2.Win || len(detail.Team1.Players) != 2 || len(detail.Team2.Players) != 1 {
+		t.Fatalf("teams = %#v / %#v", detail.Team1, detail.Team2)
+	}
+	p := detail.Team1.Players[0]
+	if p.RiotID != "Hide on bush#KR1" || p.ChampionName != "Ahri" || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || !p.IsHighlighted {
+		t.Fatalf("player = %#v", p)
+	}
+	if len(p.ItemIconURLs) != 7 || p.ItemIconURLs[2] != "" || len(p.SummonerSpellIconURLs) != 2 {
+		t.Fatalf("asset slots = %#v / %#v", p.ItemIconURLs, p.SummonerSpellIconURLs)
+	}
+}
+
+func TestMatchDetailDefaultsToTeam100AndRejectsInvalidPrefix(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(matchFixtureJSON))
+	}))
+	defer server.Close()
+	client := newTestRiotClient(server.URL)
+
+	detail, err := client.MatchDetail(context.Background(), "KR_1", "Absent#TAG", time.UnixMilli(1_720_003_600_000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Team1.Players[0].RiotID != "Hide on bush#KR1" || detail.Team1.Players[0].IsHighlighted {
+		t.Fatalf("default team/highlight = %#v", detail.Team1)
+	}
+	if _, err := client.MatchDetail(context.Background(), "NOPE_1", "", time.Now()); err == nil {
+		t.Fatal("MatchDetail accepted unsupported match prefix")
+	}
+}
+
+func TestMatchDetailMatchesRiotIDCaseInsensitively(t *testing.T) {
+	var dto matchDTO
+	dto.Metadata.MatchID = "KR_2"
+	dto.Info.GameVersion = "16.14.1.123"
+	dto.Info.Participants = []participantDTO{
+		{TeamID: 100, RiotIDGameName: "Enemy", RiotIDTagLine: "KR1"},
+		{TeamID: 200, Win: true, RiotIDGameName: "Hide on bush", RiotIDTagLine: "KR1"},
+	}
+
+	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "hide on bush#kr1", time.Now())
+	if len(detail.Team1.Players) != 1 || detail.Team1.Players[0].RiotID != "Hide on bush#KR1" {
+		t.Fatalf("Team1 = %#v, want searched player's team 200", detail.Team1)
+	}
+	if !detail.Team1.Players[0].IsHighlighted {
+		t.Fatalf("searched player was not highlighted: %#v", detail.Team1.Players[0])
+	}
+}
+
+func TestMatchDetailHandler(t *testing.T) {
+	tmpl := template.Must(template.New("matchLayout").Parse(`{{define "matchLayout"}}{{.MatchID}}|{{.Query}}|{{.Region}}|{{.Error}}|{{.Team1.Players  | len}}{{end}}`))
+	app := &App{Templates: tmpl, MatchLoader: stubMatchLoader{}}
+
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/match/KR_1?me=Faker%23KR1", nil))
+	if rr.Code != http.StatusOK || rr.Body.String() != "KR_1|Faker#KR1|kr||1" {
+		t.Fatalf("valid detail: status=%d body=%q", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/match/not-a-match", nil))
+	if rr.Code != http.StatusOK || rr.Body.String() != "not-a-match||na1|Invalid match ID.|0" {
+		t.Fatalf("invalid detail: status=%d body=%q", rr.Code, rr.Body.String())
+	}
+}
+
+func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
+	tmpl := template.Must(template.ParseFS(webFiles, "web/templates/*.tmpl"))
+	app := &App{Templates: tmpl, MatchLoader: stubMatchLoader{}}
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/match/KR_1?me=Faker%23KR1", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	for _, want := range []string{"MATCH HISTORY", "Back to Match History", "Faker#KR1"} {
+		if !strings.Contains(rr.Body.String(), want) {
+			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
+		}
+	}
+}
+
 type stubSearcher struct{}
 
 func (stubSearcher) Search(_ context.Context, riotID, region string, _ time.Time) (*ProfileView, []MatchView, error) {
 	return &ProfileView{GameName: "Faker", TagLine: "KR1"}, []MatchView{{MatchID: "KR_1"}}, nil
+}
+
+type stubMatchLoader struct{}
+
+func (stubMatchLoader) MatchDetail(_ context.Context, matchID, me string, _ time.Time) (*MatchDetailView, error) {
+	return &MatchDetailView{MatchID: matchID, Team1: TeamView{Players: []PlayerStatsView{{RiotID: me}}}}, nil
 }
 
 func newTestRiotClient(baseURL string) *RiotClient {
@@ -143,7 +254,7 @@ const matchFixtureJSON = `{
     "gameVersion":"16.14.1.123",
     "queueId":420,
     "participants":[
-      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","kills":10,"deaths":2,"assists":8,"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
+      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
       {"puuid":"ally","teamId":100,"championName":"LeeSin","riotIdGameName":"Ally","riotIdTagline":"KR1"},
       {"puuid":"enemy","teamId":200,"championName":"Garen","riotIdGameName":"Enemy","riotIdTagline":"KR1"}
     ]

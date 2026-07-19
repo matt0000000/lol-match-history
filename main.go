@@ -61,15 +61,52 @@ type ParticipantView struct {
 	IsSearchedPlayer bool
 }
 
+type MatchDetailView struct {
+	Query         string
+	Region        string
+	Error         string
+	MatchID       string
+	GameModeLabel string
+	DurationLabel string
+	TimeAgoLabel  string
+	Team1         TeamView
+	Team2         TeamView
+}
+
+type TeamView struct {
+	Win     bool
+	Players []PlayerStatsView
+}
+
+type PlayerStatsView struct {
+	RiotID                string
+	ChampionName          string
+	ChampionIconURL       string
+	Kills                 int
+	Deaths                int
+	Assists               int
+	CS                    int
+	Gold                  int
+	Damage                int
+	ItemIconURLs          []string
+	SummonerSpellIconURLs []string
+	IsHighlighted         bool
+}
+
 type Searcher interface {
 	Search(context.Context, string, string, time.Time) (*ProfileView, []MatchView, error)
 }
 
+type MatchLoader interface {
+	MatchDetail(context.Context, string, string, time.Time) (*MatchDetailView, error)
+}
+
 type App struct {
-	Templates *template.Template
-	Searcher  Searcher
-	StaticFS  fs.FS
-	Logger    *log.Logger
+	Templates   *template.Template
+	Searcher    Searcher
+	MatchLoader MatchLoader
+	StaticFS    fs.FS
+	Logger      *log.Logger
 }
 
 func (a *App) Handler() http.Handler {
@@ -77,8 +114,43 @@ func (a *App) Handler() http.Handler {
 	if a.StaticFS != nil {
 		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(a.StaticFS)))
 	}
+	mux.HandleFunc("GET /match/{id}", a.handleMatchDetail)
 	mux.HandleFunc("GET /", a.handleIndex)
 	return mux
+}
+
+func (a *App) handleMatchDetail(w http.ResponseWriter, r *http.Request) {
+	matchID := r.PathValue("id")
+	region, err := regionFromMatchID(matchID)
+	if region == "" {
+		region = "na1"
+	}
+	data := MatchDetailView{
+		Query:   strings.TrimSpace(r.URL.Query().Get("me")),
+		Region:  region,
+		MatchID: matchID,
+	}
+	if err != nil {
+		data.Error = "Invalid match ID."
+	} else if a.MatchLoader == nil {
+		data.Error = "Match details are temporarily unavailable."
+	} else {
+		detail, loadErr := a.MatchLoader.MatchDetail(r.Context(), matchID, data.Query, time.Now())
+		if loadErr != nil {
+			data.Error = loadErr.Error()
+			if a.Logger != nil {
+				a.Logger.Printf("match %q: %v", matchID, loadErr)
+			}
+		} else {
+			data = *detail
+			data.Query = strings.TrimSpace(r.URL.Query().Get("me"))
+			data.Region = region
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := a.Templates.ExecuteTemplate(w, "matchLayout", data); err != nil && a.Logger != nil {
+		a.Logger.Printf("render match %q: %v", matchID, err)
+	}
 }
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -149,24 +221,50 @@ type matchDTO struct {
 }
 
 type participantDTO struct {
-	PUUID          string `json:"puuid"`
-	TeamID         int    `json:"teamId"`
-	Win            bool   `json:"win"`
-	ChampionName   string `json:"championName"`
-	Kills          int    `json:"kills"`
-	Deaths         int    `json:"deaths"`
-	Assists        int    `json:"assists"`
-	Item0          int    `json:"item0"`
-	Item1          int    `json:"item1"`
-	Item2          int    `json:"item2"`
-	Item3          int    `json:"item3"`
-	Item4          int    `json:"item4"`
-	Item5          int    `json:"item5"`
-	Item6          int    `json:"item6"`
-	Summoner1ID    int    `json:"summoner1Id"`
-	Summoner2ID    int    `json:"summoner2Id"`
-	RiotIDGameName string `json:"riotIdGameName"`
-	RiotIDTagLine  string `json:"riotIdTagline"`
+	PUUID                       string `json:"puuid"`
+	TeamID                      int    `json:"teamId"`
+	Win                         bool   `json:"win"`
+	ChampionName                string `json:"championName"`
+	Kills                       int    `json:"kills"`
+	Deaths                      int    `json:"deaths"`
+	Assists                     int    `json:"assists"`
+	TotalMinionsKilled          int    `json:"totalMinionsKilled"`
+	NeutralMinionsKilled        int    `json:"neutralMinionsKilled"`
+	GoldEarned                  int    `json:"goldEarned"`
+	TotalDamageDealtToChampions int    `json:"totalDamageDealtToChampions"`
+	Item0                       int    `json:"item0"`
+	Item1                       int    `json:"item1"`
+	Item2                       int    `json:"item2"`
+	Item3                       int    `json:"item3"`
+	Item4                       int    `json:"item4"`
+	Item5                       int    `json:"item5"`
+	Item6                       int    `json:"item6"`
+	Summoner1ID                 int    `json:"summoner1Id"`
+	Summoner2ID                 int    `json:"summoner2Id"`
+	RiotIDGameName              string `json:"riotIdGameName"`
+	RiotIDTagLine               string `json:"riotIdTagline"`
+}
+
+func (c *RiotClient) MatchDetail(ctx context.Context, matchID, me string, now time.Time) (*MatchDetailView, error) {
+	if strings.TrimSpace(c.APIKey) == "" {
+		return nil, errors.New("Riot API key is not configured.")
+	}
+	region, err := regionFromMatchID(matchID)
+	if err != nil {
+		return nil, err
+	}
+	var dto matchDTO
+	endpoint := c.RegionalBaseURL(region) + "/lol/match/v5/matches/" + url.PathEscape(matchID)
+	if err := c.getJSON(ctx, endpoint, &dto); err != nil {
+		return nil, err
+	}
+	if dto.Metadata.MatchID == "" {
+		dto.Metadata.MatchID = matchID
+	}
+	view := c.matchDetailView(dto, me, now)
+	view.Query = strings.TrimSpace(me)
+	view.Region = region
+	return &view, nil
 }
 
 func NewRiotClient(apiKey string) *RiotClient {
@@ -366,6 +464,67 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 	return view
 }
 
+func (c *RiotClient) matchDetailView(dto matchDTO, me string, now time.Time) MatchDetailView {
+	version := majorMinorVersion(dto.Info.GameVersion)
+	if version == "" {
+		version = c.DataDragonVer
+	}
+	team1ID := 100
+	for _, p := range dto.Info.Participants {
+		if strings.EqualFold(displayRiotID(p), me) {
+			team1ID = p.TeamID
+			break
+		}
+	}
+	view := MatchDetailView{
+		MatchID:       dto.Metadata.MatchID,
+		GameModeLabel: queueLabel(dto.Info.QueueID),
+		DurationLabel: durationLabel(dto.Info.GameDuration),
+		TimeAgoLabel:  timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
+	}
+	for _, p := range dto.Info.Participants {
+		player := c.playerStatsView(version, p, me)
+		if p.TeamID == team1ID {
+			if len(view.Team1.Players) == 0 {
+				view.Team1.Win = p.Win
+			}
+			view.Team1.Players = append(view.Team1.Players, player)
+		} else {
+			if len(view.Team2.Players) == 0 {
+				view.Team2.Win = p.Win
+			}
+			view.Team2.Players = append(view.Team2.Players, player)
+		}
+	}
+	return view
+}
+
+func (c *RiotClient) playerStatsView(version string, p participantDTO, me string) PlayerStatsView {
+	view := PlayerStatsView{
+		RiotID:                displayRiotID(p),
+		ChampionName:          p.ChampionName,
+		ChampionIconURL:       c.championURL(version, p.ChampionName),
+		Kills:                 p.Kills,
+		Deaths:                p.Deaths,
+		Assists:               p.Assists,
+		CS:                    p.TotalMinionsKilled + p.NeutralMinionsKilled,
+		Gold:                  p.GoldEarned,
+		Damage:                p.TotalDamageDealtToChampions,
+		ItemIconURLs:          make([]string, 7),
+		SummonerSpellIconURLs: make([]string, 2),
+		IsHighlighted:         me != "" && strings.EqualFold(displayRiotID(p), me),
+	}
+	items := []int{p.Item0, p.Item1, p.Item2, p.Item3, p.Item4, p.Item5, p.Item6}
+	for i, item := range items {
+		if item != 0 {
+			view.ItemIconURLs[i] = fmt.Sprintf("%s/cdn/%s/img/item/%d.png", c.DataDragonBase, version, item)
+		}
+	}
+	view.SummonerSpellIconURLs[0] = c.spellURL(version, p.Summoner1ID)
+	view.SummonerSpellIconURLs[1] = c.spellURL(version, p.Summoner2ID)
+	return view
+}
+
 func (c *RiotClient) championURL(version, name string) string {
 	if name == "" {
 		return ""
@@ -401,6 +560,18 @@ func supportedRegion(region string) bool {
 
 func regionalRoute(region string) string {
 	return regionRoutes[region]
+}
+
+func regionFromMatchID(matchID string) (string, error) {
+	i := strings.Index(matchID, "_")
+	if i <= 0 || i == len(matchID)-1 {
+		return "", errors.New("invalid match ID")
+	}
+	region := strings.ToLower(matchID[:i])
+	if !supportedRegion(region) {
+		return "", errors.New("unsupported match region")
+	}
+	return region, nil
 }
 
 var regionRoutes = map[string]string{
@@ -487,11 +658,13 @@ func main() {
 	if err != nil {
 		logger.Fatal(err)
 	}
+	client := NewRiotClient(os.Getenv("RIOT_API_KEY"))
 	app := &App{
-		Templates: tmpl,
-		Searcher:  NewRiotClient(os.Getenv("RIOT_API_KEY")),
-		StaticFS:  staticFiles,
-		Logger:    logger,
+		Templates:   tmpl,
+		Searcher:    client,
+		MatchLoader: client,
+		StaticFS:    staticFiles,
+		Logger:      logger,
 	}
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {

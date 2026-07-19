@@ -60,3 +60,14 @@
 - [ ] Run `gofmt`, `go test ./...`, `go vet ./...`, and `go build ./...`.
 - [ ] Build and smoke-test the Docker image when Docker is available; otherwise report that exact environment limitation.
 - [ ] Review `git diff` without committing and hand the changes to Claude for cross-review and git writes.
+
+### Task 5: Full match scoreboard
+
+**Files:** Modify `main_test.go` and `main.go`; consume `web/templates/match.tmpl` and updated `web/templates/index.tmpl` supplied by Claude.
+
+**Interfaces:** Produce `MatchDetailView`, `TeamView`, `PlayerStatsView`, `RiotClient.MatchDetail`, and `GET /match/{id}`. `MatchDetailView` also carries `Query`, `Region`, and `Error` for the shared topbar. The raw ID prefix selects the regional route and optional `me` highlights an exact Riot ID match.
+
+- [ ] Add failing tests for match-prefix routing, team ordering, all-player stat/asset conversion, optional highlight, invalid IDs, and handler template execution.
+- [ ] Verify the expected compile failures.
+- [ ] Implement the DTO additions, detail conversion, client method, and handler.
+- [ ] Run formatting, all tests, vet, build, and local HTTP smoke checks.
