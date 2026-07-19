@@ -426,7 +426,7 @@ func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"Match History", "Back to Match History", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`} {
+	for _, want := range []string{"match-history", "back to match-history", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
 		}
@@ -441,7 +441,7 @@ func TestEmbeddedIndexTemplateRendersRedesignedMatchStats(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"123", "CS", "456", "Gold"} {
+	for _, want := range []string{"123", "cs", "456", "gold"} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
 		}

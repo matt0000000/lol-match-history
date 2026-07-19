@@ -8,45 +8,41 @@
   <img class="avatar-img" src="{{.Profile.ProfileIconURL}}" alt="">
   <div>
     <div class="profile-name">{{.Profile.GameName}}<span class="tag">#{{.Profile.TagLine}}</span></div>
-    <div class="profile-level">Level {{.Profile.SummonerLevel}}</div>
+    <div class="profile-level">level {{.Profile.SummonerLevel}}</div>
   </div>
   <div class="update-block">
     <form method="get" action="/">
       <input type="hidden" name="q" value="{{.Query}}">
       <input type="hidden" name="region" value="{{.Region}}">
       <input type="hidden" name="refresh" value="1">
-      <button type="submit" class="update-btn">Update</button>
+      <button type="submit" class="btn muted">[ update ]</button>
     </form>
     <div class="last-updated">{{.LastUpdatedLabel}}</div>
   </div>
 </div>
 
-<div class="group-label">Ranked</div>
-<div class="group">
-  <div class="row rank-row">
-    <div class="rank-queue">Solo/Duo</div>
+<div class="section-label">ranked<span class="rule"></span></div>
+<div class="panel">
+  <div class="panel-row rank-row">
+    <div class="rank-queue">solo/duo</div>
     <div class="rank-detail">
-      {{if .Profile.SoloRank}}<b>{{.Profile.SoloRank.Tier}} {{.Profile.SoloRank.Division}}</b> &middot; {{.Profile.SoloRank.LeaguePoints}} LP &middot; {{.Profile.SoloRank.Wins}}W {{.Profile.SoloRank.Losses}}L &middot; {{.Profile.SoloRank.WinRatePercent}}%{{else}}Unranked{{end}}
+      {{if .Profile.SoloRank}}<b>{{.Profile.SoloRank.Tier}} {{.Profile.SoloRank.Division}}</b> {{.Profile.SoloRank.LeaguePoints}}lp &middot; {{.Profile.SoloRank.Wins}}w {{.Profile.SoloRank.Losses}}l &middot; {{.Profile.SoloRank.WinRatePercent}}%{{else}}unranked{{end}}
     </div>
   </div>
-  <div class="row rank-row">
-    <div class="rank-queue">Flex 5v5</div>
+  <div class="panel-row rank-row">
+    <div class="rank-queue">flex 5v5</div>
     <div class="rank-detail">
-      {{if .Profile.FlexRank}}<b>{{.Profile.FlexRank.Tier}} {{.Profile.FlexRank.Division}}</b> &middot; {{.Profile.FlexRank.LeaguePoints}} LP &middot; {{.Profile.FlexRank.Wins}}W {{.Profile.FlexRank.Losses}}L &middot; {{.Profile.FlexRank.WinRatePercent}}%{{else}}Unranked{{end}}
+      {{if .Profile.FlexRank}}<b>{{.Profile.FlexRank.Tier}} {{.Profile.FlexRank.Division}}</b> {{.Profile.FlexRank.LeaguePoints}}lp &middot; {{.Profile.FlexRank.Wins}}w {{.Profile.FlexRank.Losses}}l &middot; {{.Profile.FlexRank.WinRatePercent}}%{{else}}unranked{{end}}
     </div>
   </div>
 </div>
 
-<div class="group-label">Recent Matches</div>
-<div class="group">
+<div class="section-label">recent matches<span class="rule"></span></div>
+<div class="panel">
 {{range .Matches}}
-  <a class="row match-row {{if .Win}}win{{else}}loss{{end}}" href="/match/{{.MatchID}}?me={{$.Query}}">
-    <div class="result-dot"></div>
-    <div class="result-block">
-      <div class="result-label">{{if .Win}}Victory{{else}}Defeat{{end}}</div>
-      <div class="result-sub">{{.GameModeLabel}}</div>
-      <div class="result-sub">{{.TimeAgoLabel}}</div>
-    </div>
+  <a class="panel-row match-row {{if .Win}}win{{else}}loss{{end}}" href="/match/{{.MatchID}}?me={{$.Query}}">
+    <span class="tag-badge">{{if .Win}}WIN{{else}}LOSS{{end}}</span>
+    <div class="result-block">{{.GameModeLabel}}<br>{{.TimeAgoLabel}}</div>
 
     <div class="champ-block">
       <img class="champ-icon-img" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
@@ -60,9 +56,9 @@
     </div>
 
     <div class="stat-cluster">
-      <div class="stat"><span class="v">{{.Kills}} / {{.Deaths}} / {{.Assists}}</span><span class="k">KDA</span></div>
-      <div class="stat"><span class="v">{{.CS}}</span><span class="k">CS</span></div>
-      <div class="stat gold"><span class="v">{{.Gold}}</span><span class="k">Gold</span></div>
+      <div class="stat"><span class="v">{{.Kills}}/{{.Deaths}}/{{.Assists}}</span><br><span class="k">kda</span></div>
+      <div class="stat"><span class="v">{{.CS}}</span><br><span class="k">cs</span></div>
+      <div class="stat gold"><span class="v">{{.Gold}}</span><br><span class="k">gold</span></div>
     </div>
   </a>
 {{end}}

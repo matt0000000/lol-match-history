@@ -1,25 +1,24 @@
 {{define "topbar"}}
 <header>
   <div class="header-inner">
-    <div class="header-top">
-      <a class="wordmark" href="/">Match History</a>
-    </div>
+    <div class="prompt-line"><span class="prompt-sigil">❯</span><span class="wordmark">match-history<span class="dim"> — riot match lookup</span></span></div>
     <form class="search-form" method="get" action="/">
+      <span class="sigil">$</span>
       <select name="region">
-        <option value="na1" {{if eq .Region "na1"}}selected{{end}}>NA</option>
-        <option value="euw1" {{if eq .Region "euw1"}}selected{{end}}>EUW</option>
-        <option value="eun1" {{if eq .Region "eun1"}}selected{{end}}>EUNE</option>
-        <option value="kr" {{if eq .Region "kr"}}selected{{end}}>KR</option>
-        <option value="jp1" {{if eq .Region "jp1"}}selected{{end}}>JP</option>
-        <option value="br1" {{if eq .Region "br1"}}selected{{end}}>BR</option>
-        <option value="la1" {{if eq .Region "la1"}}selected{{end}}>LAN</option>
-        <option value="la2" {{if eq .Region "la2"}}selected{{end}}>LAS</option>
-        <option value="oc1" {{if eq .Region "oc1"}}selected{{end}}>OCE</option>
-        <option value="tr1" {{if eq .Region "tr1"}}selected{{end}}>TR</option>
-        <option value="ru" {{if eq .Region "ru"}}selected{{end}}>RU</option>
+        <option value="na1" {{if eq .Region "na1"}}selected{{end}}>na1</option>
+        <option value="euw1" {{if eq .Region "euw1"}}selected{{end}}>euw1</option>
+        <option value="eun1" {{if eq .Region "eun1"}}selected{{end}}>eun1</option>
+        <option value="kr" {{if eq .Region "kr"}}selected{{end}}>kr</option>
+        <option value="jp1" {{if eq .Region "jp1"}}selected{{end}}>jp1</option>
+        <option value="br1" {{if eq .Region "br1"}}selected{{end}}>br1</option>
+        <option value="la1" {{if eq .Region "la1"}}selected{{end}}>la1</option>
+        <option value="la2" {{if eq .Region "la2"}}selected{{end}}>la2</option>
+        <option value="oc1" {{if eq .Region "oc1"}}selected{{end}}>oc1</option>
+        <option value="tr1" {{if eq .Region "tr1"}}selected{{end}}>tr1</option>
+        <option value="ru" {{if eq .Region "ru"}}selected{{end}}>ru</option>
       </select>
-      <input type="text" name="q" placeholder="Riot ID (Name#Tag)" value="{{.Query}}" autocomplete="off">
-      <button type="submit">Search</button>
+      <input type="text" name="q" placeholder="search name#tag" value="{{.Query}}" autocomplete="off">
+      <button type="submit" class="btn">[ search ]</button>
     </form>
   </div>
 </header>
@@ -31,7 +30,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Match History{{if .Profile}} — {{.Profile.GameName}}#{{.Profile.TagLine}}{{end}}</title>
+<title>match-history{{if .Profile}} — {{.Profile.GameName}}#{{.Profile.TagLine}}{{end}}</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>

@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Match Detail{{if .GameModeLabel}} — {{.GameModeLabel}}{{end}}</title>
+<title>match-history{{if .GameModeLabel}} — {{.GameModeLabel}}{{end}}</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -17,7 +17,7 @@
 {{end}}
 
 {{define "matchContent"}}
-<a class="back-link" href="/?q={{.Query}}&amp;region={{.Region}}">&larr; Back to Match History</a>
+<a class="back-link" href="/?q={{.Query}}&amp;region={{.Region}}">&larr; back to match-history</a>
 
 {{if .Error}}
 <div class="error">{{.Error}}</div>
@@ -34,34 +34,51 @@
 {{end}}
 
 {{define "teamGroup"}}
-<div class="group-label">{{if .Win}}Victory{{else}}Defeat{{end}}</div>
-<div class="group">
+<div class="section-label">{{if .Win}}victory{{else}}defeat{{end}}<span class="rule"></span></div>
+<div class="panel">
   <div class="team-head {{if .Win}}win{{else}}loss{{end}}">
-    <span>Team totals</span>
-    <span class="totals">{{.TotalKills}} / {{.TotalDeaths}} / {{.TotalAssists}} &middot; {{.TotalGold}} gold</span>
+    <span>team totals</span>
+    <span class="totals">{{.TotalKills}}/{{.TotalDeaths}}/{{.TotalAssists}} &middot; {{.TotalGold}}g</span>
   </div>
-  {{range .Players}}
-  <div class="row player-row{{if .IsHighlighted}} me{{end}}">
-    <div class="player-cell">
-      <img class="champ-icon-img" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
-      <div class="spell-col">
-        {{range .SummonerSpellIconURLs}}<img class="spell-icon-img" src="{{.}}" alt="">{{end}}
-      </div>
-      <a class="riot-id" href="/?q={{.RiotID}}&amp;region={{.Region}}">{{.RiotID}}</a>
-    </div>
-    <div class="player-stats">
-      <div class="col-kda"><span class="lbl">KDA</span>{{.Kills}} / {{.Deaths}} / {{.Assists}}</div>
-      <div class="col-cs"><span class="lbl">CS</span>{{.CS}}</div>
-      <div class="col-gold"><span class="lbl">Gold</span>{{.Gold}}</div>
-      <div class="dmg-wrap">
-        <div class="dmg-bar-track"><div class="dmg-bar-fill" style="width:{{.DamagePercent}}%"></div></div>
-        <span>{{.Damage}}</span>
-      </div>
-      <div class="items-inline">
-        {{range .ItemIconURLs}}{{if .}}<img class="item-slot-img" src="{{.}}" alt="">{{else}}<span class="item-slot empty"></span>{{end}}{{end}}
-      </div>
-    </div>
-  </div>
-  {{end}}
+  <table class="scoretable">
+    <colgroup>
+      <col style="width:auto">
+      <col style="width:100px">
+      <col style="width:56px">
+      <col style="width:80px">
+      <col style="width:170px">
+      <col style="width:150px">
+    </colgroup>
+    <thead><tr><th>player</th><th>kda</th><th>cs</th><th>gold</th><th>damage</th><th>items</th></tr></thead>
+    <tbody>
+      {{range .Players}}
+      <tr{{if .IsHighlighted}} class="me"{{end}}>
+        <td>
+          <div class="player-inner">
+            <img class="champ-icon-img" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
+            <div class="spell-col">
+              {{range .SummonerSpellIconURLs}}<img class="spell-icon-img" src="{{.}}" alt="">{{end}}
+            </div>
+            <a class="riot-id" href="/?q={{.RiotID}}&amp;region={{.Region}}">{{.RiotID}}</a>
+          </div>
+        </td>
+        <td class="num-cell">{{.Kills}}/{{.Deaths}}/{{.Assists}}</td>
+        <td class="num-cell">{{.CS}}</td>
+        <td class="num-cell">{{.Gold}}</td>
+        <td class="dmg-cell">
+          <div class="dmg-inner">
+            <div class="dmg-bar-track"><div class="dmg-bar-fill" style="width:{{.DamagePercent}}%"></div></div>
+            <span>{{.Damage}}</span>
+          </div>
+        </td>
+        <td class="items-cell">
+          <div class="items-inner">
+            {{range .ItemIconURLs}}{{if .}}<img class="item-slot-img" src="{{.}}" alt="">{{else}}<span class="item-slot empty"></span>{{end}}{{end}}
+          </div>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
 </div>
 {{end}}
