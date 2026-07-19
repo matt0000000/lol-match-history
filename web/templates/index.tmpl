@@ -6,47 +6,39 @@
 {{if .Profile}}
 <section class="profile">
   <img class="profile-icon" src="{{.Profile.ProfileIconURL}}" alt="">
-  <div class="profile-info">
-    <div class="profile-name">{{.Profile.GameName}}<span class="tagline">#{{.Profile.TagLine}}</span></div>
+  <div>
+    <div class="profile-name">{{.Profile.GameName}}<span class="tag">#{{.Profile.TagLine}}</span></div>
     <div class="profile-level">Level {{.Profile.SummonerLevel}}</div>
   </div>
 </section>
 
-<section class="matches">
+<div class="matches">
 {{range .Matches}}
-  <a class="match {{if .Win}}win{{else}}loss{{end}}" href="/match/{{.MatchID}}?me={{$.Query}}">
-    <div class="match-meta">
-      <div class="result">{{if .Win}}Victory{{else}}Defeat{{end}}</div>
-      <div class="mode">{{.GameModeLabel}}</div>
-      <div class="time-ago">{{.TimeAgoLabel}}</div>
-      <div class="duration">{{.DurationLabel}}</div>
+  <a class="match-row {{if .Win}}win{{else}}loss{{end}}" href="/match/{{.MatchID}}?me={{$.Query}}">
+    <div class="result-block">
+      <div class="result-label">{{if .Win}}Victory{{else}}Defeat{{end}}</div>
+      <div class="result-sub">{{.GameModeLabel}}</div>
+      <div class="result-sub">{{.TimeAgoLabel}}</div>
     </div>
 
-    <div class="match-champ">
+    <div class="champ-block">
       <img class="champ-icon" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
-      <div class="spells">
+      <div class="spell-col">
         {{range .SummonerSpellIconURLs}}<img class="spell-icon" src="{{.}}" alt="">{{end}}
       </div>
     </div>
 
-    <div class="match-kda">
-      <div class="kda-numbers">{{.Kills}} / {{.Deaths}} / {{.Assists}}</div>
+    <div class="items-row">
+      {{range .ItemIconURLs}}{{if .}}<img class="item-slot" src="{{.}}" alt="">{{else}}<span class="item-slot empty"></span>{{end}}{{end}}
     </div>
 
-    <div class="match-items">
-      {{range .ItemIconURLs}}{{if .}}<img class="item-icon" src="{{.}}" alt="">{{else}}<span class="item-icon empty"></span>{{end}}{{end}}
-    </div>
-
-    <div class="match-teams">
-      <ul class="team team1">
-        {{range .Team1}}<li{{if .IsSearchedPlayer}} class="me"{{end}}><img class="mini-champ" src="{{.ChampionIconURL}}" alt="">{{.RiotID}}</li>{{end}}
-      </ul>
-      <ul class="team team2">
-        {{range .Team2}}<li{{if .IsSearchedPlayer}} class="me"{{end}}><img class="mini-champ" src="{{.ChampionIconURL}}" alt="">{{.RiotID}}</li>{{end}}
-      </ul>
+    <div class="stat-cluster">
+      <div class="stat"><span class="v">{{.Kills}} / {{.Deaths}} / {{.Assists}}</span><span class="k">KDA</span></div>
+      <div class="stat"><span class="v">{{.CS}}</span><span class="k">CS</span></div>
+      <div class="stat gold"><span class="v">{{.Gold}}</span><span class="k">Gold</span></div>
     </div>
   </a>
 {{end}}
-</section>
+</div>
 {{end}}
 {{end}}

@@ -61,11 +61,11 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if m.ChampionName != "Ahri" || m.Kills != 10 || m.Deaths != 2 || m.Assists != 8 {
 		t.Fatalf("player stats = %#v", m)
 	}
+	if m.CS != 201 || m.Gold != 12345 {
+		t.Fatalf("list economy stats = CS %d, Gold %d", m.CS, m.Gold)
+	}
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
-	}
-	if len(m.Team1) != 2 || !m.Team1[0].IsSearchedPlayer || m.Team1[0].RiotID != "Hide on bush#KR1" || len(m.Team2) != 1 {
-		t.Fatalf("teams = %#v / %#v", m.Team1, m.Team2)
 	}
 	if len(paths) != 4 || !strings.Contains(paths[0], "Hide%20on%20bush/KR1") || !strings.Contains(paths[2], "start=0&count=10") {
 		t.Fatalf("paths = %#v", paths)
@@ -143,9 +143,18 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	if !detail.Team1.Win || detail.Team2.Win || len(detail.Team1.Players) != 2 || len(detail.Team2.Players) != 1 {
 		t.Fatalf("teams = %#v / %#v", detail.Team1, detail.Team2)
 	}
+	if detail.Team1.TotalKills != 11 || detail.Team1.TotalDeaths != 5 || detail.Team1.TotalAssists != 12 || detail.Team1.TotalGold != 20345 {
+		t.Fatalf("team 1 totals = %#v", detail.Team1)
+	}
+	if detail.Team2.TotalKills != 5 || detail.Team2.TotalDeaths != 5 || detail.Team2.TotalAssists != 2 || detail.Team2.TotalGold != 11000 {
+		t.Fatalf("team 2 totals = %#v", detail.Team2)
+	}
 	p := detail.Team1.Players[0]
-	if p.RiotID != "Hide on bush#KR1" || p.ChampionName != "Ahri" || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || !p.IsHighlighted {
+	if p.RiotID != "Hide on bush#KR1" || p.ChampionName != "Ahri" || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || p.DamagePercent != 59 || !p.IsHighlighted {
 		t.Fatalf("player = %#v", p)
+	}
+	if detail.Team2.Players[0].DamagePercent != 100 {
+		t.Fatalf("highest damage percent = %d", detail.Team2.Players[0].DamagePercent)
 	}
 	if len(p.ItemIconURLs) != 7 || p.ItemIconURLs[2] != "" || len(p.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", p.ItemIconURLs, p.SummonerSpellIconURLs)
@@ -190,6 +199,18 @@ func TestMatchDetailMatchesRiotIDCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestMatchDetailDamagePercentIsZeroWhenAllDamageIsZero(t *testing.T) {
+	var dto matchDTO
+	dto.Info.Participants = []participantDTO{
+		{TeamID: 100, RiotIDGameName: "One", RiotIDTagLine: "NA1"},
+		{TeamID: 200, RiotIDGameName: "Two", RiotIDTagLine: "NA1"},
+	}
+	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "", time.Now())
+	if detail.Team1.Players[0].DamagePercent != 0 || detail.Team2.Players[0].DamagePercent != 0 {
+		t.Fatalf("zero-damage percents = %d, %d", detail.Team1.Players[0].DamagePercent, detail.Team2.Players[0].DamagePercent)
+	}
+}
+
 func TestMatchDetailHandler(t *testing.T) {
 	tmpl := template.Must(template.New("matchLayout").Parse(`{{define "matchLayout"}}{{.MatchID}}|{{.Query}}|{{.Region}}|{{.Error}}|{{.Team1.Players  | len}}{{end}}`))
 	app := &App{Templates: tmpl, MatchLoader: stubMatchLoader{}}
@@ -222,10 +243,25 @@ func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
 	}
 }
 
+func TestEmbeddedIndexTemplateRendersRedesignedMatchStats(t *testing.T) {
+	tmpl := template.Must(template.ParseFS(webFiles, "web/templates/*.tmpl"))
+	app := &App{Templates: tmpl, Searcher: stubSearcher{}}
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/?q=Faker%23KR1&region=kr", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	for _, want := range []string{"123", "CS", "456", "Gold"} {
+		if !strings.Contains(rr.Body.String(), want) {
+			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
+		}
+	}
+}
+
 type stubSearcher struct{}
 
 func (stubSearcher) Search(_ context.Context, riotID, region string, _ time.Time) (*ProfileView, []MatchView, error) {
-	return &ProfileView{GameName: "Faker", TagLine: "KR1"}, []MatchView{{MatchID: "KR_1"}}, nil
+	return &ProfileView{GameName: "Faker", TagLine: "KR1"}, []MatchView{{MatchID: "KR_1", CS: 123, Gold: 456}}, nil
 }
 
 type stubMatchLoader struct{}
@@ -255,8 +291,8 @@ const matchFixtureJSON = `{
     "queueId":420,
     "participants":[
       {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
-      {"puuid":"ally","teamId":100,"championName":"LeeSin","riotIdGameName":"Ally","riotIdTagline":"KR1"},
-      {"puuid":"enemy","teamId":200,"championName":"Garen","riotIdGameName":"Enemy","riotIdTagline":"KR1"}
+      {"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
+      {"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
     ]
   }
 }`

@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"io/fs"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -49,16 +50,10 @@ type MatchView struct {
 	Kills                 int
 	Deaths                int
 	Assists               int
+	CS                    int
+	Gold                  int
 	ItemIconURLs          []string
 	SummonerSpellIconURLs []string
-	Team1                 []ParticipantView
-	Team2                 []ParticipantView
-}
-
-type ParticipantView struct {
-	RiotID           string
-	ChampionIconURL  string
-	IsSearchedPlayer bool
 }
 
 type MatchDetailView struct {
@@ -74,8 +69,12 @@ type MatchDetailView struct {
 }
 
 type TeamView struct {
-	Win     bool
-	Players []PlayerStatsView
+	Win          bool
+	TotalKills   int
+	TotalDeaths  int
+	TotalAssists int
+	TotalGold    int
+	Players      []PlayerStatsView
 }
 
 type PlayerStatsView struct {
@@ -88,6 +87,7 @@ type PlayerStatsView struct {
 	CS                    int
 	Gold                  int
 	Damage                int
+	DamagePercent         int
 	ItemIconURLs          []string
 	SummonerSpellIconURLs []string
 	IsHighlighted         bool
@@ -418,10 +418,9 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		version = c.DataDragonVer
 	}
 	var player participantDTO
-	found := false
 	for _, p := range dto.Info.Participants {
 		if p.PUUID == searchedPUUID {
-			player, found = p, true
+			player = p
 			break
 		}
 	}
@@ -436,6 +435,8 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		Kills:                 player.Kills,
 		Deaths:                player.Deaths,
 		Assists:               player.Assists,
+		CS:                    player.TotalMinionsKilled + player.NeutralMinionsKilled,
+		Gold:                  player.GoldEarned,
 		ItemIconURLs:          make([]string, 7),
 		SummonerSpellIconURLs: make([]string, 2),
 	}
@@ -447,20 +448,6 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 	}
 	view.SummonerSpellIconURLs[0] = c.spellURL(version, player.Summoner1ID)
 	view.SummonerSpellIconURLs[1] = c.spellURL(version, player.Summoner2ID)
-	if found {
-		for _, p := range dto.Info.Participants {
-			participant := ParticipantView{
-				RiotID:           displayRiotID(p),
-				ChampionIconURL:  c.championURL(version, p.ChampionName),
-				IsSearchedPlayer: p.PUUID == searchedPUUID,
-			}
-			if p.TeamID == player.TeamID {
-				view.Team1 = append(view.Team1, participant)
-			} else {
-				view.Team2 = append(view.Team2, participant)
-			}
-		}
-	}
 	return view
 }
 
@@ -470,10 +457,13 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me string, now time.Time) Mat
 		version = c.DataDragonVer
 	}
 	team1ID := 100
+	maxDamage := 0
 	for _, p := range dto.Info.Participants {
 		if strings.EqualFold(displayRiotID(p), me) {
 			team1ID = p.TeamID
-			break
+		}
+		if p.TotalDamageDealtToChampions > maxDamage {
+			maxDamage = p.TotalDamageDealtToChampions
 		}
 	}
 	view := MatchDetailView{
@@ -483,23 +473,41 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me string, now time.Time) Mat
 		TimeAgoLabel:  timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
 	}
 	for _, p := range dto.Info.Participants {
-		player := c.playerStatsView(version, p, me)
+		player := c.playerStatsView(version, p, me, maxDamage)
 		if p.TeamID == team1ID {
 			if len(view.Team1.Players) == 0 {
 				view.Team1.Win = p.Win
 			}
+			view.Team1.TotalKills += player.Kills
+			view.Team1.TotalDeaths += player.Deaths
+			view.Team1.TotalAssists += player.Assists
+			view.Team1.TotalGold += player.Gold
 			view.Team1.Players = append(view.Team1.Players, player)
 		} else {
 			if len(view.Team2.Players) == 0 {
 				view.Team2.Win = p.Win
 			}
+			view.Team2.TotalKills += player.Kills
+			view.Team2.TotalDeaths += player.Deaths
+			view.Team2.TotalAssists += player.Assists
+			view.Team2.TotalGold += player.Gold
 			view.Team2.Players = append(view.Team2.Players, player)
 		}
 	}
 	return view
 }
 
-func (c *RiotClient) playerStatsView(version string, p participantDTO, me string) PlayerStatsView {
+func (c *RiotClient) playerStatsView(version string, p participantDTO, me string, maxDamage int) PlayerStatsView {
+	damagePercent := 0
+	if maxDamage > 0 {
+		damagePercent = int(math.Round(float64(p.TotalDamageDealtToChampions) * 100 / float64(maxDamage)))
+		if damagePercent < 0 {
+			damagePercent = 0
+		}
+		if damagePercent > 100 {
+			damagePercent = 100
+		}
+	}
 	view := PlayerStatsView{
 		RiotID:                displayRiotID(p),
 		ChampionName:          p.ChampionName,
@@ -510,6 +518,7 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, me string
 		CS:                    p.TotalMinionsKilled + p.NeutralMinionsKilled,
 		Gold:                  p.GoldEarned,
 		Damage:                p.TotalDamageDealtToChampions,
+		DamagePercent:         damagePercent,
 		ItemIconURLs:          make([]string, 7),
 		SummonerSpellIconURLs: make([]string, 2),
 		IsHighlighted:         me != "" && strings.EqualFold(displayRiotID(p), me),
