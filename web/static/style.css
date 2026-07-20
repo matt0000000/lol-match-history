@@ -47,7 +47,7 @@ a:hover { text-decoration: underline; }
 button { font-family: inherit; }
 
 header { border-bottom: 1px solid var(--border); }
-.header-inner { max-width: 760px; margin: 0 auto; padding: 16px 20px; }
+.header-inner { max-width: 960px; margin: 0 auto; padding: 16px 20px; }
 
 .prompt-line { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 12px; }
 .prompt-sigil { color: var(--win); font-weight: bold; }
@@ -82,7 +82,7 @@ a:focus-visible {
 .btn.muted { border-color: var(--border); color: var(--muted); }
 .btn.muted:hover { background: var(--border); color: var(--ink); }
 
-main { max-width: 760px; margin: 0 auto; padding: 20px 20px 64px; }
+main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 
 .error {
   border: 1px solid var(--loss); color: var(--loss); padding: 10px 14px; margin-bottom: 16px;
