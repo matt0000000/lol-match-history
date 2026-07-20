@@ -53,6 +53,11 @@ header { border-bottom: 1px solid var(--border); }
 .prompt-sigil { color: var(--win); font-weight: bold; }
 .wordmark { color: var(--ink); font-weight: bold; }
 .wordmark .dim { color: var(--muted); }
+.theme-toggle { margin-left: auto; flex-shrink: 0; }
+
+@media (max-width: 480px) {
+  .wordmark .dim { display: none; }
+}
 
 .search-form { display: flex; align-items: center; gap: 8px; }
 .search-form .sigil { color: var(--accent); }

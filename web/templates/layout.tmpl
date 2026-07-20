@@ -1,7 +1,15 @@
+{{define "themeInit"}}
+<script>(function(){try{var t=localStorage.getItem('theme');if(t){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+{{end}}
+
 {{define "topbar"}}
 <header>
   <div class="header-inner">
-    <div class="prompt-line"><span class="prompt-sigil">❯</span><span class="wordmark">match-history<span class="dim"> — riot match lookup</span></span></div>
+    <div class="prompt-line">
+      <span class="prompt-sigil">❯</span>
+      <span class="wordmark">match-history<span class="dim"> — riot match lookup</span></span>
+      <button type="button" class="btn theme-toggle" onclick="toggleTheme()" aria-label="Toggle color theme">[ theme ]</button>
+    </div>
     <form class="search-form" method="get" action="/">
       <span class="sigil">$</span>
       <select name="region">
@@ -22,6 +30,24 @@
     </form>
   </div>
 </header>
+<script>
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('theme', t); } catch (e) {}
+  var b = document.querySelector('.theme-toggle');
+  if (b) b.textContent = t === 'dark' ? '[ light ]' : '[ dark ]';
+}
+function currentTheme(){
+  var t = document.documentElement.getAttribute('data-theme');
+  if (t) return t;
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+}
+function toggleTheme(){ applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'); }
+(function(){
+  var b = document.querySelector('.theme-toggle');
+  if (b) b.textContent = currentTheme() === 'dark' ? '[ light ]' : '[ dark ]';
+})();
+</script>
 {{end}}
 
 {{define "layout"}}
@@ -31,6 +57,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>match-history{{if .Profile}} — {{.Profile.GameName}}#{{.Profile.TagLine}}{{end}}</title>
+{{template "themeInit" .}}
 <link rel="stylesheet" href="{{styleURL}}">
 </head>
 <body>
