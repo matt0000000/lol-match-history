@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +29,28 @@ const riotVerificationToken = "78f3e35f-b152-4401-b2bb-1d2ffecdc690"
 
 //go:embed web/templates/*.tmpl web/static/*
 var webFiles embed.FS
+
+// styleVersion is a content hash of the stylesheet, appended to its URL so a
+// changed stylesheet always gets a URL no browser or CDN has cached before.
+// Without it, clients keep serving a stale stylesheet after a redeploy.
+var styleVersion = hashEmbeddedFile("web/static/style.css")
+
+func hashEmbeddedFile(name string) string {
+	data, err := webFiles.ReadFile(name)
+	if err != nil {
+		return "dev"
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:4])
+}
+
+// parseTemplates parses the embedded templates with the helpers they rely on.
+// Tests use it too, so they exercise the same template set the server does.
+func parseTemplates() (*template.Template, error) {
+	return template.New("").Funcs(template.FuncMap{
+		"styleURL": func() string { return "/static/style.css?v=" + styleVersion },
+	}).ParseFS(webFiles, "web/templates/*.tmpl")
+}
 
 type PageData struct {
 	Query            string
@@ -873,7 +897,7 @@ func displayRiotID(p participantDTO) string {
 
 func main() {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
-	tmpl, err := template.ParseFS(webFiles, "web/templates/*.tmpl")
+	tmpl, err := parseTemplates()
 	if err != nil {
 		logger.Fatal(err)
 	}

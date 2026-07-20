@@ -419,7 +419,7 @@ func TestMatchDetailHandler(t *testing.T) {
 }
 
 func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
-	tmpl := template.Must(template.ParseFS(webFiles, "web/templates/*.tmpl"))
+	tmpl := template.Must(parseTemplates())
 	app := &App{Templates: tmpl, MatchLoader: stubMatchLoader{}}
 	rr := httptest.NewRecorder()
 	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/match/KR_1?me=Faker%23KR1", nil))
@@ -434,7 +434,7 @@ func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
 }
 
 func TestEmbeddedIndexTemplateRendersRedesignedMatchStats(t *testing.T) {
-	tmpl := template.Must(template.ParseFS(webFiles, "web/templates/*.tmpl"))
+	tmpl := template.Must(parseTemplates())
 	app := &App{Templates: tmpl, Searcher: stubSearcher{}}
 	rr := httptest.NewRecorder()
 	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/?q=Faker%23KR1&region=kr", nil))
