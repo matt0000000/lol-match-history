@@ -478,9 +478,9 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	}
 	body := buf.String()
 	for _, want := range []string{
-		`<span class="v">73</span><br><span class="k">10m cs</span>`,
-		`<span class="v">0</span><br><span class="k">10m cs</span>`,
-		`<span class="v">—</span><br><span class="k">10m cs</span>`,
+		`<span class="v">73</span><br><span class="k">cs@10m</span>`,
+		`<span class="v">0</span><br><span class="k">cs@10m</span>`,
+		`<span class="v">—</span><br><span class="k">cs@10m</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index body does not contain %q: %s", want, body)
@@ -505,7 +505,7 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	}
 	body := buf.String()
 	for _, want := range []string{
-		`<th>10m cs</th>`,
+		`<th>cs@10m</th>`,
 		`<td class="num-cell">73</td>`,
 		`<td class="num-cell">0</td>`,
 		`<td class="num-cell">—</td>`,
