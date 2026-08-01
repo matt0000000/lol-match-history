@@ -80,20 +80,21 @@ type RankView struct {
 }
 
 type MatchView struct {
-	MatchID               string
-	Win                   bool
-	GameModeLabel         string
-	DurationLabel         string
-	TimeAgoLabel          string
-	ChampionName          string
-	ChampionIconURL       string
-	Kills                 int
-	Deaths                int
-	Assists               int
-	CS                    int
-	Gold                  int
-	ItemIconURLs          []string
-	SummonerSpellIconURLs []string
+	MatchID                   string
+	Win                       bool
+	GameModeLabel             string
+	DurationLabel             string
+	TimeAgoLabel              string
+	ChampionName              string
+	ChampionIconURL           string
+	Kills                     int
+	Deaths                    int
+	Assists                   int
+	CS                        int
+	LaneMinionsFirst10Minutes *int
+	Gold                      int
+	ItemIconURLs              []string
+	SummonerSpellIconURLs     []string
 }
 
 type MatchDetailView struct {
@@ -118,20 +119,21 @@ type TeamView struct {
 }
 
 type PlayerStatsView struct {
-	RiotID                string
-	Region                string
-	ChampionName          string
-	ChampionIconURL       string
-	Kills                 int
-	Deaths                int
-	Assists               int
-	CS                    int
-	Gold                  int
-	Damage                int
-	DamagePercent         int
-	ItemIconURLs          []string
-	SummonerSpellIconURLs []string
-	IsHighlighted         bool
+	RiotID                    string
+	Region                    string
+	ChampionName              string
+	ChampionIconURL           string
+	Kills                     int
+	Deaths                    int
+	Assists                   int
+	CS                        int
+	LaneMinionsFirst10Minutes *int
+	Gold                      int
+	Damage                    int
+	DamagePercent             int
+	ItemIconURLs              []string
+	SummonerSpellIconURLs     []string
+	IsHighlighted             bool
 }
 
 type Searcher interface {
@@ -362,28 +364,33 @@ type matchDTO struct {
 }
 
 type participantDTO struct {
-	PUUID                       string `json:"puuid"`
-	TeamID                      int    `json:"teamId"`
-	Win                         bool   `json:"win"`
-	ChampionName                string `json:"championName"`
-	Kills                       int    `json:"kills"`
-	Deaths                      int    `json:"deaths"`
-	Assists                     int    `json:"assists"`
-	TotalMinionsKilled          int    `json:"totalMinionsKilled"`
-	NeutralMinionsKilled        int    `json:"neutralMinionsKilled"`
-	GoldEarned                  int    `json:"goldEarned"`
-	TotalDamageDealtToChampions int    `json:"totalDamageDealtToChampions"`
-	Item0                       int    `json:"item0"`
-	Item1                       int    `json:"item1"`
-	Item2                       int    `json:"item2"`
-	Item3                       int    `json:"item3"`
-	Item4                       int    `json:"item4"`
-	Item5                       int    `json:"item5"`
-	Item6                       int    `json:"item6"`
-	Summoner1ID                 int    `json:"summoner1Id"`
-	Summoner2ID                 int    `json:"summoner2Id"`
-	RiotIDGameName              string `json:"riotIdGameName"`
-	RiotIDTagLine               string `json:"riotIdTagline"`
+	PUUID                       string                   `json:"puuid"`
+	TeamID                      int                      `json:"teamId"`
+	Win                         bool                     `json:"win"`
+	ChampionName                string                   `json:"championName"`
+	Kills                       int                      `json:"kills"`
+	Deaths                      int                      `json:"deaths"`
+	Assists                     int                      `json:"assists"`
+	TotalMinionsKilled          int                      `json:"totalMinionsKilled"`
+	NeutralMinionsKilled        int                      `json:"neutralMinionsKilled"`
+	GoldEarned                  int                      `json:"goldEarned"`
+	TotalDamageDealtToChampions int                      `json:"totalDamageDealtToChampions"`
+	Item0                       int                      `json:"item0"`
+	Item1                       int                      `json:"item1"`
+	Item2                       int                      `json:"item2"`
+	Item3                       int                      `json:"item3"`
+	Item4                       int                      `json:"item4"`
+	Item5                       int                      `json:"item5"`
+	Item6                       int                      `json:"item6"`
+	Summoner1ID                 int                      `json:"summoner1Id"`
+	Summoner2ID                 int                      `json:"summoner2Id"`
+	RiotIDGameName              string                   `json:"riotIdGameName"`
+	RiotIDTagLine               string                   `json:"riotIdTagline"`
+	Challenges                  participantChallengesDTO `json:"challenges"`
+}
+
+type participantChallengesDTO struct {
+	LaneMinionsFirst10Minutes *int `json:"laneMinionsFirst10Minutes"`
 }
 
 func (c *RiotClient) MatchDetail(ctx context.Context, matchID, me string, now time.Time) (*MatchDetailView, error) {
@@ -662,20 +669,21 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		}
 	}
 	view := MatchView{
-		MatchID:               dto.Metadata.MatchID,
-		Win:                   player.Win,
-		GameModeLabel:         queueLabel(dto.Info.QueueID),
-		DurationLabel:         durationLabel(dto.Info.GameDuration),
-		TimeAgoLabel:          timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
-		ChampionName:          player.ChampionName,
-		ChampionIconURL:       c.championURL(version, player.ChampionName),
-		Kills:                 player.Kills,
-		Deaths:                player.Deaths,
-		Assists:               player.Assists,
-		CS:                    player.TotalMinionsKilled + player.NeutralMinionsKilled,
-		Gold:                  player.GoldEarned,
-		ItemIconURLs:          make([]string, 7),
-		SummonerSpellIconURLs: make([]string, 2),
+		MatchID:                   dto.Metadata.MatchID,
+		Win:                       player.Win,
+		GameModeLabel:             queueLabel(dto.Info.QueueID),
+		DurationLabel:             durationLabel(dto.Info.GameDuration),
+		TimeAgoLabel:              timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
+		ChampionName:              player.ChampionName,
+		ChampionIconURL:           c.championURL(version, player.ChampionName),
+		Kills:                     player.Kills,
+		Deaths:                    player.Deaths,
+		Assists:                   player.Assists,
+		CS:                        player.TotalMinionsKilled + player.NeutralMinionsKilled,
+		LaneMinionsFirst10Minutes: player.Challenges.LaneMinionsFirst10Minutes,
+		Gold:                      player.GoldEarned,
+		ItemIconURLs:              make([]string, 7),
+		SummonerSpellIconURLs:     make([]string, 2),
 	}
 	items := []int{player.Item0, player.Item1, player.Item2, player.Item3, player.Item4, player.Item5, player.Item6}
 	for i, item := range items {
@@ -746,20 +754,21 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, me, regio
 		}
 	}
 	view := PlayerStatsView{
-		RiotID:                displayRiotID(p),
-		Region:                region,
-		ChampionName:          p.ChampionName,
-		ChampionIconURL:       c.championURL(version, p.ChampionName),
-		Kills:                 p.Kills,
-		Deaths:                p.Deaths,
-		Assists:               p.Assists,
-		CS:                    p.TotalMinionsKilled + p.NeutralMinionsKilled,
-		Gold:                  p.GoldEarned,
-		Damage:                p.TotalDamageDealtToChampions,
-		DamagePercent:         damagePercent,
-		ItemIconURLs:          make([]string, 7),
-		SummonerSpellIconURLs: make([]string, 2),
-		IsHighlighted:         me != "" && strings.EqualFold(displayRiotID(p), me),
+		RiotID:                    displayRiotID(p),
+		Region:                    region,
+		ChampionName:              p.ChampionName,
+		ChampionIconURL:           c.championURL(version, p.ChampionName),
+		Kills:                     p.Kills,
+		Deaths:                    p.Deaths,
+		Assists:                   p.Assists,
+		CS:                        p.TotalMinionsKilled + p.NeutralMinionsKilled,
+		LaneMinionsFirst10Minutes: p.Challenges.LaneMinionsFirst10Minutes,
+		Gold:                      p.GoldEarned,
+		Damage:                    p.TotalDamageDealtToChampions,
+		DamagePercent:             damagePercent,
+		ItemIconURLs:              make([]string, 7),
+		SummonerSpellIconURLs:     make([]string, 2),
+		IsHighlighted:             me != "" && strings.EqualFold(displayRiotID(p), me),
 	}
 	items := []int{p.Item0, p.Item1, p.Item2, p.Item3, p.Item4, p.Item5, p.Item6}
 	for i, item := range items {

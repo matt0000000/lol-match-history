@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"html/template"
@@ -134,6 +135,9 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	}
 	if m.CS != 201 || m.Gold != 12345 {
 		t.Fatalf("list economy stats = CS %d, Gold %d", m.CS, m.Gold)
+	}
+	if m.LaneMinionsFirst10Minutes == nil || *m.LaneMinionsFirst10Minutes != 73 {
+		t.Fatalf("list 10m CS = %v, want pointer to 73", m.LaneMinionsFirst10Minutes)
 	}
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
@@ -288,6 +292,15 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	p := detail.Team1.Players[0]
 	if p.RiotID != "Hide on bush#KR1" || p.Region != "kr" || p.ChampionName != "Ahri" || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || p.DamagePercent != 59 || !p.IsHighlighted {
 		t.Fatalf("player = %#v", p)
+	}
+	if p.LaneMinionsFirst10Minutes == nil || *p.LaneMinionsFirst10Minutes != 73 {
+		t.Fatalf("searched player 10m CS = %v, want pointer to 73", p.LaneMinionsFirst10Minutes)
+	}
+	if detail.Team1.Players[1].LaneMinionsFirst10Minutes != nil {
+		t.Fatalf("ally 10m CS = %v, want nil", detail.Team1.Players[1].LaneMinionsFirst10Minutes)
+	}
+	if detail.Team2.Players[0].LaneMinionsFirst10Minutes == nil || *detail.Team2.Players[0].LaneMinionsFirst10Minutes != 0 {
+		t.Fatalf("enemy 10m CS = %v, want pointer to 0", detail.Team2.Players[0].LaneMinionsFirst10Minutes)
 	}
 	if detail.Team2.Players[0].DamagePercent != 100 {
 		t.Fatalf("highest damage percent = %d", detail.Team2.Players[0].DamagePercent)
@@ -448,6 +461,61 @@ func TestEmbeddedIndexTemplateRendersRedesignedMatchStats(t *testing.T) {
 	}
 }
 
+func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
+	tmpl := template.Must(parseTemplates())
+	seventyThree, zero := 73, 0
+	data := PageData{
+		Profile: &ProfileView{},
+		Matches: []MatchView{
+			{LaneMinionsFirst10Minutes: &seventyThree},
+			{LaneMinionsFirst10Minutes: &zero},
+			{},
+		},
+	}
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "content", data); err != nil {
+		t.Fatal(err)
+	}
+	body := buf.String()
+	for _, want := range []string{
+		`<span class="v">73</span><br><span class="k">10m cs</span>`,
+		`<span class="v">0</span><br><span class="k">10m cs</span>`,
+		`<span class="v">—</span><br><span class="k">10m cs</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("index body does not contain %q: %s", want, body)
+		}
+	}
+}
+
+func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
+	tmpl := template.Must(parseTemplates())
+	seventyThree, zero := 73, 0
+	data := MatchDetailView{
+		GameModeLabel: "Ranked Solo/Duo",
+		Team1: TeamView{Win: true, Players: []PlayerStatsView{
+			{LaneMinionsFirst10Minutes: &seventyThree},
+			{LaneMinionsFirst10Minutes: &zero},
+			{},
+		}},
+	}
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "matchContent", data); err != nil {
+		t.Fatal(err)
+	}
+	body := buf.String()
+	for _, want := range []string{
+		`<th>10m cs</th>`,
+		`<td class="num-cell">73</td>`,
+		`<td class="num-cell">0</td>`,
+		`<td class="num-cell">—</td>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("detail body does not contain %q: %s", want, body)
+		}
+	}
+}
+
 type stubSearcher struct{}
 
 func (stubSearcher) Search(_ context.Context, riotID, region string, _ time.Time) (*ProfileView, []MatchView, error) {
@@ -498,9 +566,9 @@ const matchFixtureJSON = `{
     "gameVersion":"16.14.1.123",
     "queueId":420,
     "participants":[
-      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
+      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"challenges":{"laneMinionsFirst10Minutes":73},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
       {"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
-      {"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
+      {"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"challenges":{"laneMinionsFirst10Minutes":0},"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
     ]
   }
 }`

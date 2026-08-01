@@ -59,6 +59,7 @@
       <div class="stat"><span class="v">{{.Kills}}/{{.Deaths}}/{{.Assists}}</span><br><span class="k">kda</span></div>
       <div class="stat"><span class="v">{{.CS}}</span><br><span class="k">cs</span></div>
       <div class="stat gold"><span class="v">{{.Gold}}</span><br><span class="k">gold</span></div>
+      <div class="stat"><span class="v">{{with .LaneMinionsFirst10Minutes}}{{.}}{{else}}—{{end}}</span><br><span class="k">10m cs</span></div>
     </div>
   </a>
 {{end}}
