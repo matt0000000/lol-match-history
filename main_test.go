@@ -139,6 +139,9 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if m.LaneMinionsFirst10Minutes == nil || *m.LaneMinionsFirst10Minutes != 73 {
 		t.Fatalf("list 10m CS = %v, want pointer to 73", m.LaneMinionsFirst10Minutes)
 	}
+	if m.CSDeltaFirst10Minutes == nil || *m.CSDeltaFirst10Minutes != 73 {
+		t.Fatalf("list 10m CS delta = %v, want pointer to 73", m.CSDeltaFirst10Minutes)
+	}
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
 	}
@@ -296,11 +299,20 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	if p.LaneMinionsFirst10Minutes == nil || *p.LaneMinionsFirst10Minutes != 73 {
 		t.Fatalf("searched player 10m CS = %v, want pointer to 73", p.LaneMinionsFirst10Minutes)
 	}
+	if p.CSDeltaFirst10Minutes == nil || *p.CSDeltaFirst10Minutes != 73 {
+		t.Fatalf("searched player 10m CS delta = %v, want pointer to 73", p.CSDeltaFirst10Minutes)
+	}
 	if detail.Team1.Players[1].LaneMinionsFirst10Minutes != nil {
 		t.Fatalf("ally 10m CS = %v, want nil", detail.Team1.Players[1].LaneMinionsFirst10Minutes)
 	}
 	if detail.Team2.Players[0].LaneMinionsFirst10Minutes == nil || *detail.Team2.Players[0].LaneMinionsFirst10Minutes != 0 {
 		t.Fatalf("enemy 10m CS = %v, want pointer to 0", detail.Team2.Players[0].LaneMinionsFirst10Minutes)
+	}
+	if got := detail.Team2.Players[0].CSDeltaFirst10Minutes; got == nil || *got != -73 {
+		t.Fatalf("enemy 10m CS delta = %v, want pointer to -73", got)
+	}
+	if detail.Team1.Players[1].CSDeltaFirst10Minutes != nil {
+		t.Fatalf("unpaired ally 10m CS delta = %v, want nil", detail.Team1.Players[1].CSDeltaFirst10Minutes)
 	}
 	if detail.Team2.Players[0].DamagePercent != 100 {
 		t.Fatalf("highest damage percent = %d", detail.Team2.Players[0].DamagePercent)
@@ -463,12 +475,13 @@ func TestEmbeddedIndexTemplateRendersRedesignedMatchStats(t *testing.T) {
 
 func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
-	seventyThree, zero := 73, 0
+	seventyThree, twelve, negativeEight, zero := 73, 12, -8, 0
 	data := PageData{
 		Profile: &ProfileView{},
 		Matches: []MatchView{
-			{LaneMinionsFirst10Minutes: &seventyThree},
-			{LaneMinionsFirst10Minutes: &zero},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve},
+			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
+			{CSDeltaFirst10Minutes: &zero},
 			{},
 		},
 	}
@@ -481,6 +494,10 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<span class="v">73</span><br><span class="k">cs@10m</span>`,
 		`<span class="v">0</span><br><span class="k">cs@10m</span>`,
 		`<span class="v">—</span><br><span class="k">cs@10m</span>`,
+		`<span class="v">&#43;12</span><br><span class="k">csΔ@10</span>`,
+		`<span class="v">-8</span><br><span class="k">csΔ@10</span>`,
+		`<span class="v">0</span><br><span class="k">csΔ@10</span>`,
+		`<span class="v">—</span><br><span class="k">csΔ@10</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index body does not contain %q: %s", want, body)
@@ -490,12 +507,13 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 
 func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
-	seventyThree, zero := 73, 0
+	seventyThree, twelve, negativeEight, zero := 73, 12, -8, 0
 	data := MatchDetailView{
 		GameModeLabel: "Ranked Solo/Duo",
 		Team1: TeamView{Win: true, Players: []PlayerStatsView{
-			{LaneMinionsFirst10Minutes: &seventyThree},
-			{LaneMinionsFirst10Minutes: &zero},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve},
+			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
+			{CSDeltaFirst10Minutes: &zero},
 			{},
 		}},
 	}
@@ -506,13 +524,74 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	body := buf.String()
 	for _, want := range []string{
 		`<th>cs@10m</th>`,
+		`<th>csΔ@10</th>`,
 		`<td class="num-cell">73</td>`,
+		`<td class="num-cell">&#43;12</td>`,
+		`<td class="num-cell">-8</td>`,
 		`<td class="num-cell">0</td>`,
 		`<td class="num-cell">—</td>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("detail body does not contain %q: %s", want, body)
 		}
+	}
+}
+
+func TestCSDeltaFirst10MinutesRequiresOneReportedLaneOpponent(t *testing.T) {
+	seventy, sixty := 70, 60
+	player := participantDTO{
+		PUUID: "me", TeamID: 100, TeamPosition: "MIDDLE",
+		Challenges: participantChallengesDTO{LaneMinionsFirst10Minutes: &seventy},
+	}
+	tests := []struct {
+		name         string
+		participants []participantDTO
+		want         *int
+	}{
+		{
+			name: "same position on enemy team",
+			participants: []participantDTO{
+				player,
+				{PUUID: "enemy", TeamID: 200, TeamPosition: "middle", Challenges: participantChallengesDTO{LaneMinionsFirst10Minutes: &sixty}},
+			},
+			want: func() *int { value := 10; return &value }(),
+		},
+		{
+			name: "opponent stat omitted",
+			participants: []participantDTO{
+				player,
+				{PUUID: "enemy", TeamID: 200, TeamPosition: "MIDDLE"},
+			},
+		},
+		{
+			name: "position missing",
+			participants: []participantDTO{
+				{PUUID: "me", TeamID: 100, Challenges: participantChallengesDTO{LaneMinionsFirst10Minutes: &seventy}},
+			},
+		},
+		{
+			name: "opponent position ambiguous",
+			participants: []participantDTO{
+				player,
+				{PUUID: "enemy-1", TeamID: 200, TeamPosition: "MIDDLE", Challenges: participantChallengesDTO{LaneMinionsFirst10Minutes: &sixty}},
+				{PUUID: "enemy-2", TeamID: 200, TeamPosition: "MIDDLE", Challenges: participantChallengesDTO{LaneMinionsFirst10Minutes: &sixty}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := csDeltaFirst10Minutes(tt.participants[0], tt.participants)
+			if tt.want == nil {
+				if got != nil {
+					t.Fatalf("csDeltaFirst10Minutes() = %d, want nil", *got)
+				}
+				return
+			}
+			if got == nil || *got != *tt.want {
+				t.Fatalf("csDeltaFirst10Minutes() = %v, want %d", got, *tt.want)
+			}
+		})
 	}
 }
 
@@ -566,9 +645,9 @@ const matchFixtureJSON = `{
     "gameVersion":"16.14.1.123",
     "queueId":420,
     "participants":[
-      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"challenges":{"laneMinionsFirst10Minutes":73},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
-      {"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
-      {"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"challenges":{"laneMinionsFirst10Minutes":0},"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
+      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","teamPosition":"MIDDLE","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"challenges":{"laneMinionsFirst10Minutes":73},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
+      {"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","teamPosition":"JUNGLE","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
+      {"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","teamPosition":"MIDDLE","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"challenges":{"laneMinionsFirst10Minutes":0},"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
     ]
   }
 }`

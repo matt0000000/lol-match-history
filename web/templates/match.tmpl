@@ -47,11 +47,12 @@
       <col style="width:96px">
       <col style="width:56px">
       <col style="width:64px">
+      <col style="width:72px">
       <col style="width:76px">
       <col style="width:162px">
       <col style="width:164px">
     </colgroup>
-    <thead><tr><th>player</th><th>kda</th><th>cs</th><th>cs@10m</th><th>gold</th><th>damage</th><th>items</th></tr></thead>
+    <thead><tr><th>player</th><th>kda</th><th>cs</th><th>cs@10m</th><th>csΔ@10</th><th>gold</th><th>damage</th><th>items</th></tr></thead>
     <tbody>
       {{range .Players}}
       <tr{{if .IsHighlighted}} class="me"{{end}}>
@@ -67,6 +68,7 @@
         <td class="num-cell">{{.Kills}}/{{.Deaths}}/{{.Assists}}</td>
         <td class="num-cell">{{.CS}}</td>
         <td class="num-cell">{{with .LaneMinionsFirst10Minutes}}{{.}}{{else}}—{{end}}</td>
+        <td class="num-cell">{{formatCSDelta .CSDeltaFirst10Minutes}}</td>
         <td class="num-cell">{{.Gold}}</td>
         <td class="dmg-cell">
           <div class="dmg-inner">

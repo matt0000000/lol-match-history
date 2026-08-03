@@ -60,6 +60,7 @@
       <div class="stat"><span class="v">{{.CS}}</span><br><span class="k">cs</span></div>
       <div class="stat gold"><span class="v">{{.Gold}}</span><br><span class="k">gold</span></div>
       <div class="stat"><span class="v">{{with .LaneMinionsFirst10Minutes}}{{.}}{{else}}—{{end}}</span><br><span class="k">cs@10m</span></div>
+      <div class="stat"><span class="v">{{formatCSDelta .CSDeltaFirst10Minutes}}</span><br><span class="k">csΔ@10</span></div>
     </div>
   </a>
 {{end}}

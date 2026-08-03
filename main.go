@@ -48,8 +48,19 @@ func hashEmbeddedFile(name string) string {
 // Tests use it too, so they exercise the same template set the server does.
 func parseTemplates() (*template.Template, error) {
 	return template.New("").Funcs(template.FuncMap{
-		"styleURL": func() string { return "/static/style.css?v=" + styleVersion },
+		"styleURL":      func() string { return "/static/style.css?v=" + styleVersion },
+		"formatCSDelta": formatCSDelta,
 	}).ParseFS(webFiles, "web/templates/*.tmpl")
+}
+
+func formatCSDelta(delta *int) string {
+	if delta == nil {
+		return "—"
+	}
+	if *delta > 0 {
+		return "+" + strconv.Itoa(*delta)
+	}
+	return strconv.Itoa(*delta)
 }
 
 type PageData struct {
@@ -92,6 +103,7 @@ type MatchView struct {
 	Assists                   int
 	CS                        int
 	LaneMinionsFirst10Minutes *int
+	CSDeltaFirst10Minutes     *int
 	Gold                      int
 	ItemIconURLs              []string
 	SummonerSpellIconURLs     []string
@@ -128,6 +140,7 @@ type PlayerStatsView struct {
 	Assists                   int
 	CS                        int
 	LaneMinionsFirst10Minutes *int
+	CSDeltaFirst10Minutes     *int
 	Gold                      int
 	Damage                    int
 	DamagePercent             int
@@ -368,6 +381,7 @@ type participantDTO struct {
 	TeamID                      int                      `json:"teamId"`
 	Win                         bool                     `json:"win"`
 	ChampionName                string                   `json:"championName"`
+	TeamPosition                string                   `json:"teamPosition"`
 	Kills                       int                      `json:"kills"`
 	Deaths                      int                      `json:"deaths"`
 	Assists                     int                      `json:"assists"`
@@ -681,6 +695,7 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		Assists:                   player.Assists,
 		CS:                        player.TotalMinionsKilled + player.NeutralMinionsKilled,
 		LaneMinionsFirst10Minutes: player.Challenges.LaneMinionsFirst10Minutes,
+		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(player, dto.Info.Participants),
 		Gold:                      player.GoldEarned,
 		ItemIconURLs:              make([]string, 7),
 		SummonerSpellIconURLs:     make([]string, 2),
@@ -718,7 +733,7 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.T
 		TimeAgoLabel:  timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
 	}
 	for _, p := range dto.Info.Participants {
-		player := c.playerStatsView(version, p, me, region, maxDamage)
+		player := c.playerStatsView(version, p, dto.Info.Participants, me, region, maxDamage)
 		if p.TeamID == team1ID {
 			if len(view.Team1.Players) == 0 {
 				view.Team1.Win = p.Win
@@ -742,7 +757,7 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.T
 	return view
 }
 
-func (c *RiotClient) playerStatsView(version string, p participantDTO, me, region string, maxDamage int) PlayerStatsView {
+func (c *RiotClient) playerStatsView(version string, p participantDTO, participants []participantDTO, me, region string, maxDamage int) PlayerStatsView {
 	damagePercent := 0
 	if maxDamage > 0 {
 		damagePercent = int(math.Round(float64(p.TotalDamageDealtToChampions) * 100 / float64(maxDamage)))
@@ -763,6 +778,7 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, me, regio
 		Assists:                   p.Assists,
 		CS:                        p.TotalMinionsKilled + p.NeutralMinionsKilled,
 		LaneMinionsFirst10Minutes: p.Challenges.LaneMinionsFirst10Minutes,
+		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(p, participants),
 		Gold:                      p.GoldEarned,
 		Damage:                    p.TotalDamageDealtToChampions,
 		DamagePercent:             damagePercent,
@@ -779,6 +795,31 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, me, regio
 	view.SummonerSpellIconURLs[0] = c.spellURL(version, p.Summoner1ID)
 	view.SummonerSpellIconURLs[1] = c.spellURL(version, p.Summoner2ID)
 	return view
+}
+
+func csDeltaFirst10Minutes(player participantDTO, participants []participantDTO) *int {
+	if player.Challenges.LaneMinionsFirst10Minutes == nil || strings.TrimSpace(player.TeamPosition) == "" {
+		return nil
+	}
+
+	var opponent *participantDTO
+	for i := range participants {
+		candidate := &participants[i]
+		if candidate.TeamID == player.TeamID ||
+			!strings.EqualFold(strings.TrimSpace(candidate.TeamPosition), strings.TrimSpace(player.TeamPosition)) {
+			continue
+		}
+		if opponent != nil {
+			return nil
+		}
+		opponent = candidate
+	}
+	if opponent == nil || opponent.Challenges.LaneMinionsFirst10Minutes == nil {
+		return nil
+	}
+
+	delta := *player.Challenges.LaneMinionsFirst10Minutes - *opponent.Challenges.LaneMinionsFirst10Minutes
+	return &delta
 }
 
 func (c *RiotClient) championURL(version, name string) string {
