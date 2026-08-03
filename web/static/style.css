@@ -87,7 +87,26 @@ a:focus-visible {
 .btn.muted { border-color: var(--border); color: var(--muted); }
 .btn.muted:hover { background: var(--border); color: var(--ink); }
 
+@media (max-width: 480px) {
+  .header-inner { padding: 12px; }
+  .prompt-line { margin-bottom: 10px; }
+  .theme-toggle { min-height: 36px; padding: 5px 9px; }
+
+  .search-form {
+    display: grid;
+    grid-template-columns: auto 72px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .search-form input { min-width: 0; font-size: 16px; }
+  .search-form select { width: 72px; font-size: 16px; }
+  .search-form .btn { grid-column: 1 / -1; min-height: 40px; }
+}
+
 main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
+
+@media (max-width: 480px) {
+  main { padding: 14px 12px calc(40px + env(safe-area-inset-bottom)); }
+}
 
 .error {
   border: 1px solid var(--loss); color: var(--loss); padding: 10px 14px; margin-bottom: 16px;
@@ -131,6 +150,14 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
   .summary-stat:nth-child(2n) { border-right: none; }
   .summary-stat:nth-last-child(-n + 3) { border-bottom: 1px solid var(--border); }
   .summary-stat:nth-last-child(-n + 2) { border-bottom: none; }
+}
+
+@media (max-width: 480px) {
+  .profile { align-items: flex-start; padding: 12px; gap: 10px; }
+  .profile-name { max-width: calc(100vw - 110px); overflow-wrap: anywhere; }
+  .update-block { width: 100%; flex-direction: row; align-items: center; justify-content: space-between; }
+  .update-block .btn { min-height: 36px; }
+  .last-updated { text-align: right; }
 }
 
 /* Sections */
@@ -184,9 +211,36 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .stat.gold .v { color: var(--gold); }
 
 @media (max-width: 680px) {
-  .stat-cluster { gap: 8px; }
-  .result-block { width: 90px; }
+  .match-row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    padding: 12px;
+  }
+  .result-block { width: auto; min-width: 0; }
   .champ-icon-img { width: 28px; height: 28px; }
+  .items-row { grid-column: 1 / -1; }
+  .item-slot-img,
+  .item-slot.empty { width: 20px; height: 20px; }
+  .stat-cluster {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 0;
+    width: 100%;
+    margin: 0;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+  }
+  .stat { width: auto; text-align: left; }
+  .stat:nth-child(3n + 2) { text-align: center; }
+  .stat:nth-child(3n) { text-align: right; }
+}
+
+@media (max-width: 480px) {
+  .rank-row { align-items: flex-start; padding: 10px 12px; }
+  .rank-row .rank-queue { width: 82px; }
+  .rank-row .rank-detail { min-width: 0; overflow-wrap: anywhere; }
 }
 
 /* Match detail page */
@@ -246,5 +300,27 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .items-inner .item-slot.empty { width: 17px; height: 17px; }
 
 @media (max-width: 680px) {
-  .scoretable { font-size: 11px; }
+  .back-link { margin-bottom: 12px; }
+  .detail-meta { gap: 6px 10px; margin-bottom: 12px; }
+  .team-head { position: sticky; left: 0; padding: 8px 12px; }
+  .team-head .totals { white-space: nowrap; }
+  .scoreboard-panel {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scoretable { min-width: 1040px; font-size: 11px; }
+  .scoretable th,
+  .scoretable td { padding: 7px 10px; }
+  .scoretable th:first-child,
+  .scoretable td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    width: 190px;
+    background: var(--bg);
+    box-shadow: 1px 0 0 var(--border);
+  }
+  .scoretable thead th:first-child { z-index: 2; }
+  .scoretable tr.me td:first-child { background: var(--panel); }
 }

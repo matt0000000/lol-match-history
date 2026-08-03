@@ -36,7 +36,7 @@
 
 {{define "teamGroup"}}
 <div class="section-label">{{if .Win}}victory{{else}}defeat{{end}}<span class="rule"></span></div>
-<div class="panel">
+<div class="panel scoreboard-panel">
   <div class="team-head {{if .Win}}win{{else}}loss{{end}}">
     <span>team totals</span>
     <span class="totals">{{.TotalKills}}/{{.TotalDeaths}}/{{.TotalAssists}} &middot; {{.TotalGold}}g</span>
