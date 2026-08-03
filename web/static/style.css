@@ -245,6 +245,8 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 
 /* Match detail page */
 
+.match-main { max-width: 1280px; }
+
 .back-link { display: inline-block; margin-bottom: 16px; color: var(--accent); }
 
 .detail-meta { display: flex; gap: 12px; margin-bottom: 16px; font-size: 13px; flex-wrap: wrap; }
@@ -259,7 +261,9 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .team-head.win { color: var(--win); }
 .team-head.loss { color: var(--loss); }
 
-.scoretable { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
+.scoreboard-panel { overflow-x: auto; overscroll-behavior-x: contain; }
+.scoretable { width: 100%; min-width: 1106px; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
+.scoretable .player-col { width: 300px; }
 .scoretable th {
   text-align: left; font-size: 11px; color: var(--muted); font-weight: normal;
   padding: 6px 16px; border-bottom: 1px solid var(--border);
@@ -305,11 +309,10 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
   .team-head { position: sticky; left: 0; padding: 8px 12px; }
   .team-head .totals { white-space: nowrap; }
   .scoreboard-panel {
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
   }
   .scoretable { min-width: 1040px; font-size: 11px; }
+  .scoretable .player-col { width: 190px; }
   .scoretable th,
   .scoretable td { padding: 7px 10px; }
   .scoretable th:first-child,
