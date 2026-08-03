@@ -161,8 +161,7 @@ type MatchView struct {
 	ChampionName              string
 	ChampionIconURL           string
 	RoleLabel                 string
-	PerformanceLabel          string
-	PerformanceTone           string
+	PerformanceLabels         []PerformanceLabelView
 	Kills                     int
 	Deaths                    int
 	Assists                   int
@@ -172,8 +171,22 @@ type MatchView struct {
 	CSDeltaFirst10Minutes     *int
 	KillParticipationPercent  *int
 	Gold                      int
+	GoldPerMinute             *float64
+	Damage                    int
+	DamagePerMinute           *float64
+	DamageSharePercent        *int
+	VisionScore               int
+	VisionPerMinute           *float64
+	ControlWards              int
+	ObjectiveDamage           int
+	TurretDamage              int
 	ItemIconURLs              []string
 	SummonerSpellIconURLs     []string
+}
+
+type PerformanceLabelView struct {
+	Text string
+	Tone string
 }
 
 type MatchDetailView struct {
@@ -220,8 +233,17 @@ type PlayerStatsView struct {
 	CSDeltaFirst10Minutes     *int
 	KillParticipationPercent  *int
 	Gold                      int
+	GoldPerMinute             *float64
 	Damage                    int
 	DamagePercent             int
+	DamageSharePercent        *int
+	DamagePerMinute           *float64
+	VisionScore               int
+	VisionPerMinute           *float64
+	ControlWards              int
+	ObjectiveDamage           int
+	TurretDamage              int
+	PerformanceLabels         []PerformanceLabelView
 	ItemIconURLs              []string
 	SummonerSpellIconURLs     []string
 	IsHighlighted             bool
@@ -634,6 +656,16 @@ type participantDTO struct {
 	NeutralMinionsKilled        int                      `json:"neutralMinionsKilled"`
 	GoldEarned                  int                      `json:"goldEarned"`
 	TotalDamageDealtToChampions int                      `json:"totalDamageDealtToChampions"`
+	DamageDealtToObjectives     int                      `json:"damageDealtToObjectives"`
+	DamageDealtToTurrets        int                      `json:"damageDealtToTurrets"`
+	VisionScore                 int                      `json:"visionScore"`
+	VisionWardsBoughtInGame     int                      `json:"visionWardsBoughtInGame"`
+	TurretTakedowns             int                      `json:"turretTakedowns"`
+	FirstBloodKill              bool                     `json:"firstBloodKill"`
+	FirstBloodAssist            bool                     `json:"firstBloodAssist"`
+	TripleKills                 int                      `json:"tripleKills"`
+	QuadraKills                 int                      `json:"quadraKills"`
+	PentaKills                  int                      `json:"pentaKills"`
 	Item0                       int                      `json:"item0"`
 	Item1                       int                      `json:"item1"`
 	Item2                       int                      `json:"item2"`
@@ -650,6 +682,7 @@ type participantDTO struct {
 
 type participantChallengesDTO struct {
 	LaneMinionsFirst10Minutes *int `json:"laneMinionsFirst10Minutes"`
+	SoloKills                 *int `json:"soloKills"`
 }
 
 func (c *RiotClient) MatchDetail(ctx context.Context, matchID, me string, now time.Time) (*MatchDetailView, error) {
@@ -945,10 +978,19 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(player, dto.Info.Participants),
 		KillParticipationPercent:  killParticipationPercent(player, dto.Info.Participants),
 		Gold:                      player.GoldEarned,
+		GoldPerMinute:             statPerMinute(player.GoldEarned, dto.Info.GameDuration),
+		Damage:                    player.TotalDamageDealtToChampions,
+		DamagePerMinute:           statPerMinute(player.TotalDamageDealtToChampions, dto.Info.GameDuration),
+		DamageSharePercent:        teamDamageSharePercent(player, dto.Info.Participants),
+		VisionScore:               player.VisionScore,
+		VisionPerMinute:           statPerMinute(player.VisionScore, dto.Info.GameDuration),
+		ControlWards:              player.VisionWardsBoughtInGame,
+		ObjectiveDamage:           player.DamageDealtToObjectives,
+		TurretDamage:              player.DamageDealtToTurrets,
 		ItemIconURLs:              make([]string, 7),
 		SummonerSpellIconURLs:     make([]string, 2),
 	}
-	view.PerformanceLabel, view.PerformanceTone = performanceIndicator(view)
+	view.PerformanceLabels = derivePerformanceLabels(player, dto.Info.Participants, dto.Info.GameDuration)
 	items := []int{player.Item0, player.Item1, player.Item2, player.Item3, player.Item4, player.Item5, player.Item6}
 	for i, item := range items {
 		if item != 0 {
@@ -1035,27 +1077,133 @@ func roleLabel(position string) string {
 	}
 }
 
-func performanceIndicator(match MatchView) (string, string) {
-	if match.CSDeltaFirst10Minutes != nil {
-		if *match.CSDeltaFirst10Minutes >= 10 {
-			return "strong lane", "good"
-		}
-		if *match.CSDeltaFirst10Minutes <= -10 {
-			return "weak lane", "bad"
+func derivePerformanceLabels(player participantDTO, participants []participantDTO, duration int) []PerformanceLabelView {
+	labels := make([]PerformanceLabelView, 0)
+	add := func(text, tone string) { labels = append(labels, PerformanceLabelView{Text: text, Tone: tone}) }
+	role := roleLabel(player.TeamPosition)
+
+	if delta := csDeltaFirst10Minutes(player, participants); delta != nil {
+		switch {
+		case *delta >= 20:
+			add("lane bully", "good")
+		case *delta >= 10:
+			add("strong lane", "good")
+		case *delta <= -20:
+			add("crushed in lane", "bad")
+		case *delta <= -10:
+			add("weak lane", "bad")
 		}
 	}
-	if match.KillParticipationPercent != nil {
-		if *match.KillParticipationPercent >= 70 {
-			return "high participation", "good"
-		}
-		if *match.KillParticipationPercent <= 35 {
-			return "low participation", "bad"
+	csMinute := csPerMinute(player.TotalMinionsKilled+player.NeutralMinionsKilled, duration)
+	if csMinute != nil {
+		switch {
+		case *csMinute >= 8:
+			add("farm machine", "good")
+		case *csMinute >= 7:
+			add("good farming", "good")
+		case *csMinute < 5 && durationSeconds(duration) >= 15*60 && role != "Support" && role != "Unknown":
+			add("low farm", "bad")
 		}
 	}
-	if match.CSPerMinute != nil && *match.CSPerMinute >= 7 {
-		return "good farming", "good"
+	if player.Challenges.LaneMinionsFirst10Minutes != nil && *player.Challenges.LaneMinionsFirst10Minutes >= 80 {
+		add("early farmer", "good")
 	}
-	return "", ""
+
+	kp := killParticipationPercent(player, participants)
+	if kp != nil {
+		switch {
+		case *kp >= 80:
+			add("everywhere", "good")
+		case *kp >= 70:
+			add("high participation", "good")
+		case *kp <= 35:
+			add("low participation", "bad")
+		}
+	}
+	kda := float64(player.Kills+player.Assists) / float64(max(player.Deaths, 1))
+	if player.Kills >= 10 && kda >= 4 && kp != nil && *kp >= 60 {
+		add("carry performance", "good")
+	}
+	if player.Deaths <= 1 && kp != nil && *kp >= 50 {
+		add("untouchable", "good")
+	}
+	if kda >= 5 && player.Kills+player.Assists >= 10 {
+		add("high kda", "good")
+	}
+	if player.Kills >= 12 {
+		add("bloodthirsty", "good")
+	}
+	if player.Assists >= 15 {
+		add("team player", "good")
+	}
+	if player.Deaths == 0 && player.Kills+player.Assists > 0 {
+		add("deathless", "good")
+	}
+	if player.Deaths >= 10 {
+		add("rough game", "bad")
+	}
+
+	damageShare := teamDamageSharePercent(player, participants)
+	if damageShare != nil {
+		switch {
+		case *damageShare >= 30:
+			add("damage carry", "good")
+		case *damageShare >= 25:
+			add("heavy hitter", "good")
+		case *damageShare < 10 && durationSeconds(duration) >= 15*60 && role != "Support" && role != "Unknown":
+			add("low damage", "bad")
+		}
+	}
+	if player.GoldEarned > 0 && player.TotalDamageDealtToChampions >= 15000 && float64(player.TotalDamageDealtToChampions)/float64(player.GoldEarned) >= 1.8 {
+		add("gold efficient", "good")
+	}
+	if player.DamageDealtToObjectives >= 10000 {
+		add("objective focused", "good")
+	}
+	if player.DamageDealtToTurrets >= 5000 || player.TurretTakedowns >= 3 {
+		add("tower pusher", "good")
+	}
+
+	if good, bad, ok := visionThresholds(role); ok && player.VisionScore > 0 && durationSeconds(duration) >= 15*60 {
+		if visionMinute := statPerMinute(player.VisionScore, duration); visionMinute != nil {
+			if *visionMinute >= good {
+				add("visionary", "good")
+			} else if *visionMinute <= bad {
+				add("poor vision", "bad")
+			}
+		}
+	}
+	if player.VisionWardsBoughtInGame >= 3 {
+		add("control ward buyer", "good")
+	}
+	if player.FirstBloodKill || player.FirstBloodAssist {
+		add("first blood", "neutral")
+	}
+	if player.Challenges.SoloKills != nil && *player.Challenges.SoloKills >= 2 {
+		add("solo killer", "good")
+	}
+	switch {
+	case player.PentaKills > 0:
+		add("pentakill", "good")
+	case player.QuadraKills > 0:
+		add("quadra kill", "good")
+	case player.TripleKills > 0:
+		add("triple kill", "good")
+	}
+	return labels
+}
+
+func visionThresholds(role string) (good, bad float64, ok bool) {
+	switch role {
+	case "Support":
+		return 1.5, 0.8, true
+	case "Jungle":
+		return 1.0, 0.5, true
+	case "Top", "Mid", "AD Carry":
+		return 0.7, 0.3, true
+	default:
+		return 0, 0, false
+	}
 }
 
 func (c *RiotClient) playerStatsView(version string, p participantDTO, participants []participantDTO, duration int, me, region string, maxDamage int) PlayerStatsView {
@@ -1083,8 +1231,17 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, participa
 		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(p, participants),
 		KillParticipationPercent:  killParticipationPercent(p, participants),
 		Gold:                      p.GoldEarned,
+		GoldPerMinute:             statPerMinute(p.GoldEarned, duration),
 		Damage:                    p.TotalDamageDealtToChampions,
 		DamagePercent:             damagePercent,
+		DamageSharePercent:        teamDamageSharePercent(p, participants),
+		DamagePerMinute:           statPerMinute(p.TotalDamageDealtToChampions, duration),
+		VisionScore:               p.VisionScore,
+		VisionPerMinute:           statPerMinute(p.VisionScore, duration),
+		ControlWards:              p.VisionWardsBoughtInGame,
+		ObjectiveDamage:           p.DamageDealtToObjectives,
+		TurretDamage:              p.DamageDealtToTurrets,
+		PerformanceLabels:         derivePerformanceLabels(p, participants, duration),
 		ItemIconURLs:              make([]string, 7),
 		SummonerSpellIconURLs:     make([]string, 2),
 		IsHighlighted:             me != "" && strings.EqualFold(displayRiotID(p), me),
@@ -1126,18 +1283,42 @@ func csDeltaFirst10Minutes(player participantDTO, participants []participantDTO)
 }
 
 func csPerMinute(cs, duration int) *float64 {
+	return statPerMinute(cs, duration)
+}
+
+func statPerMinute(value, duration int) *float64 {
 	if duration <= 0 {
 		return nil
 	}
+	seconds := durationSeconds(duration)
+	if seconds <= 0 {
+		return nil
+	}
+	rate := math.Round(float64(value)/(seconds/60)*10) / 10
+	return &rate
+}
+
+func durationSeconds(duration int) float64 {
 	seconds := float64(duration)
 	if seconds > 12*60*60 {
 		seconds /= 1000
 	}
-	if seconds <= 0 {
+	return seconds
+}
+
+func teamDamageSharePercent(player participantDTO, participants []participantDTO) *int {
+	total := 0
+	for _, participant := range participants {
+		if participant.TeamID == player.TeamID {
+			total += participant.TotalDamageDealtToChampions
+		}
+	}
+	if total <= 0 {
 		return nil
 	}
-	value := math.Round(float64(cs)/(seconds/60)*10) / 10
-	return &value
+	share := int(math.Round(float64(player.TotalDamageDealtToChampions) * 100 / float64(total)))
+	share = max(0, min(100, share))
+	return &share
 }
 
 func killParticipationPercent(player participantDTO, participants []participantDTO) *int {

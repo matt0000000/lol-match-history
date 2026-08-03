@@ -134,8 +134,8 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if m.ChampionName != "Ahri" || m.Kills != 10 || m.Deaths != 2 || m.Assists != 8 {
 		t.Fatalf("player stats = %#v", m)
 	}
-	if m.RoleLabel != "Mid" || m.PerformanceLabel != "strong lane" || m.PerformanceTone != "good" {
-		t.Fatalf("role/performance = %q/%q/%q", m.RoleLabel, m.PerformanceLabel, m.PerformanceTone)
+	if m.RoleLabel != "Mid" || !hasPerformanceLabel(m.PerformanceLabels, "lane bully", "good") || !hasPerformanceLabel(m.PerformanceLabels, "damage carry", "good") {
+		t.Fatalf("role/performance = %q/%#v", m.RoleLabel, m.PerformanceLabels)
 	}
 	if m.CS != 201 || m.Gold != 12345 {
 		t.Fatalf("list economy stats = CS %d, Gold %d", m.CS, m.Gold)
@@ -151,6 +151,12 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	}
 	if m.KillParticipationPercent == nil || *m.KillParticipationPercent != 100 {
 		t.Fatalf("list KP = %v, want capped 100%%", m.KillParticipationPercent)
+	}
+	if m.DamageSharePercent == nil || *m.DamageSharePercent != 70 || m.VisionScore != 50 || m.ControlWards != 3 || m.ObjectiveDamage != 12000 || m.TurretDamage != 6000 {
+		t.Fatalf("list advanced stats = %#v", m)
+	}
+	if m.GoldPerMinute == nil || math.Abs(*m.GoldPerMinute-383) > 0.1 || m.DamagePerMinute == nil || math.Abs(*m.DamagePerMinute-727.8) > 0.1 || m.VisionPerMinute == nil || math.Abs(*m.VisionPerMinute-1.6) > 0.1 {
+		t.Fatalf("list per-minute stats = gold %v damage %v vision %v", m.GoldPerMinute, m.DamagePerMinute, m.VisionPerMinute)
 	}
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
@@ -306,29 +312,51 @@ func TestRecentSummaryUsesAvailableLastTwentyMatchStats(t *testing.T) {
 	}
 }
 
-func TestPerformanceIndicatorUsesStablePriorityAndThresholds(t *testing.T) {
-	positiveTen, negativeTen, positiveNine := 10, -10, 9
-	seventy, thirtyFive := 70, 35
-	seven := 7.0
+func TestDerivePerformanceLabelsReturnsEveryMatchingCategory(t *testing.T) {
+	eighty, sixty := 80, 60
 	for _, tc := range []struct {
-		name      string
-		match     MatchView
-		wantLabel string
-		wantTone  string
+		name         string
+		player       participantDTO
+		participants []participantDTO
+		wantLabel    string
+		wantTone     string
 	}{
-		{"strong lane takes priority", MatchView{CSDeltaFirst10Minutes: &positiveTen, KillParticipationPercent: &thirtyFive}, "strong lane", "good"},
-		{"weak lane", MatchView{CSDeltaFirst10Minutes: &negativeTen}, "weak lane", "bad"},
-		{"high participation", MatchView{CSDeltaFirst10Minutes: &positiveNine, KillParticipationPercent: &seventy}, "high participation", "good"},
-		{"low participation", MatchView{KillParticipationPercent: &thirtyFive}, "low participation", "bad"},
-		{"good farming", MatchView{CSPerMinute: &seven}, "good farming", "good"},
-		{"no signal", MatchView{}, "", ""},
+		{"lane bully", participantDTO{TeamID: 100, TeamPosition: "MIDDLE", Challenges: participantChallengesDTO{LaneMinionsFirst10Minutes: &eighty}}, []participantDTO{{TeamID: 200, TeamPosition: "MIDDLE", Challenges: participantChallengesDTO{LaneMinionsFirst10Minutes: &sixty}}}, "lane bully", "good"},
+		{"farm machine", participantDTO{TeamID: 100, TeamPosition: "TOP", TotalMinionsKilled: 240}, nil, "farm machine", "good"},
+		{"everywhere", participantDTO{PUUID: "me", TeamID: 100, Kills: 7, Assists: 1}, []participantDTO{{PUUID: "me", TeamID: 100, Kills: 7, Assists: 1}, {TeamID: 100, Kills: 3}}, "everywhere", "good"},
+		{"rough game", participantDTO{TeamID: 100, Deaths: 10}, nil, "rough game", "bad"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			label, tone := performanceIndicator(tc.match)
-			if label != tc.wantLabel || tone != tc.wantTone {
-				t.Fatalf("performanceIndicator() = %q/%q, want %q/%q", label, tone, tc.wantLabel, tc.wantTone)
+			participants := tc.participants
+			if len(participants) == 0 {
+				participants = []participantDTO{tc.player}
+			} else if tc.player.PUUID == "" {
+				participants = append([]participantDTO{tc.player}, participants...)
+			}
+			labels := derivePerformanceLabels(tc.player, participants, 1800)
+			if !hasPerformanceLabel(labels, tc.wantLabel, tc.wantTone) {
+				t.Fatalf("derivePerformanceLabels() = %#v, want %q/%q", labels, tc.wantLabel, tc.wantTone)
 			}
 		})
+	}
+}
+
+func hasPerformanceLabel(labels []PerformanceLabelView, text, tone string) bool {
+	for _, label := range labels {
+		if label.Text == text && label.Tone == tone {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDerivePerformanceLabelsTreatsMissingOptionalSignalsAsUnknown(t *testing.T) {
+	player := participantDTO{TeamID: 100, TeamPosition: "TOP", VisionScore: 0}
+	labels := derivePerformanceLabels(player, []participantDTO{player}, 1800)
+	for _, unwanted := range []string{"poor vision", "solo killer", "low damage"} {
+		if hasPerformanceLabel(labels, unwanted, "bad") || hasPerformanceLabel(labels, unwanted, "good") {
+			t.Fatalf("missing data produced %q in %#v", unwanted, labels)
+		}
 	}
 }
 
@@ -425,6 +453,21 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	}
 	if p.KillParticipationPercent == nil || *p.KillParticipationPercent != 100 {
 		t.Fatalf("searched player KP = %v, want capped 100%%", p.KillParticipationPercent)
+	}
+	if p.DamageSharePercent == nil || *p.DamageSharePercent != 70 || p.VisionScore != 50 || p.ControlWards != 3 || p.ObjectiveDamage != 12000 || p.TurretDamage != 6000 {
+		t.Fatalf("searched player advanced stats = %#v", p)
+	}
+	for _, label := range []string{"lane bully", "everywhere", "damage carry", "objective focused", "tower pusher", "control ward buyer", "first blood", "solo killer", "triple kill"} {
+		tone := "good"
+		if label == "first blood" {
+			tone = "neutral"
+		}
+		if !hasPerformanceLabel(p.PerformanceLabels, label, tone) {
+			t.Fatalf("searched player labels = %#v, missing %q", p.PerformanceLabels, label)
+		}
+	}
+	if len(p.PerformanceLabels) < 9 {
+		t.Fatalf("labels were unexpectedly capped: %#v", p.PerformanceLabels)
 	}
 	if detail.Team1.Players[1].LaneMinionsFirst10Minutes != nil {
 		t.Fatalf("ally 10m CS = %v, want nil", detail.Team1.Players[1].LaneMinionsFirst10Minutes)
@@ -610,7 +653,7 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	data := PageData{
 		Profile: &ProfileView{},
 		Matches: []MatchView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, PerformanceLabel: "strong lane", PerformanceTone: "good"},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, PerformanceLabels: []PerformanceLabelView{{Text: "strong lane", Tone: "good"}, {Text: "everywhere", Tone: "good"}}},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
 			{},
@@ -634,6 +677,7 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<span class="v">90%</span><br><span class="k">kp</span>`,
 		`<span class="v">—</span><br><span class="k">kp</span>`,
 		`<span class="performance-tag good">strong lane</span>`,
+		`<span class="performance-tag good">everywhere</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index body does not contain %q: %s", want, body)
@@ -643,12 +687,12 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 
 func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
-	seventyThree, twelve, negativeEight, zero, ninety := 73, 12, -8, 0, 90
+	seventyThree, twelve, negativeEight, zero, ninety, thirtyFive := 73, 12, -8, 0, 90, 35
 	sixPointTwo := 6.2
 	data := MatchDetailView{
 		GameModeLabel: "Ranked Solo/Duo",
 		Team1: TeamView{Win: true, Objectives: ObjectiveView{Towers: 9, Dragons: 3, Barons: 1, Heralds: 1, Grubs: 4}, Players: []PlayerStatsView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, Gold: 12000, GoldPerMinute: &sixPointTwo, Damage: 24000, DamageSharePercent: &thirtyFive, DamagePerMinute: &sixPointTwo, VisionScore: 42, VisionPerMinute: &sixPointTwo, ControlWards: 3, ObjectiveDamage: 9000, TurretDamage: 4000, PerformanceLabels: []PerformanceLabelView{{Text: "damage carry", Tone: "good"}}},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
 			{},
@@ -664,6 +708,8 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<th>csΔ@10</th>`,
 		`<th>cs/min</th>`,
 		`<th>kp</th>`,
+		`<th>vision</th>`,
+		`<th>objectives</th>`,
 		`<td class="num-cell">73</td>`,
 		`<td class="num-cell">&#43;12</td>`,
 		`<td class="num-cell">-8</td>`,
@@ -671,6 +717,10 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<td class="num-cell">—</td>`,
 		`<td class="num-cell">6.2</td>`,
 		`<td class="num-cell">90%</td>`,
+		`<small>35% · 6.2/min</small>`,
+		`<small>6.2/min · 3 cw</small>`,
+		`<span>9000 obj</span><small>4000 turret</small>`,
+		`<span class="performance-tag good">damage carry</span>`,
 		`towers <b>9</b>`,
 		`dragons <b>3</b>`,
 		`barons <b>1</b>`,
@@ -834,7 +884,7 @@ const matchFixtureJSON = `{
     "gameVersion":"16.14.1.123",
     "queueId":420,
     "participants":[
-      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","teamPosition":"MIDDLE","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"challenges":{"laneMinionsFirst10Minutes":73},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
+      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","teamPosition":"MIDDLE","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"damageDealtToObjectives":12000,"damageDealtToTurrets":6000,"visionScore":50,"visionWardsBoughtInGame":3,"turretTakedowns":3,"firstBloodKill":true,"tripleKills":1,"challenges":{"laneMinionsFirst10Minutes":73,"soloKills":2},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
       {"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","teamPosition":"JUNGLE","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
       {"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","teamPosition":"MIDDLE","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"challenges":{"laneMinionsFirst10Minutes":0},"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
     ],
