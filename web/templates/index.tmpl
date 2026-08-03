@@ -28,7 +28,6 @@
   <div class="summary-stat"><span class="v">{{.WinRatePercent}}%</span><span class="k">win rate</span></div>
   <div class="summary-stat"><span class="v">{{printf "%.2f" .AverageKDA}}</span><span class="k">avg kda</span></div>
   <div class="summary-stat"><span class="v">{{formatDecimal .AverageCSPerMinute}}</span><span class="k">avg cs/min</span></div>
-  <div class="summary-stat"><span class="v">{{formatDecimalDelta .AverageCSDeltaFirst10}}</span><span class="k">avg csΔ@10</span></div>
   <div class="summary-stat champion-summary"><span class="v">{{.MostPlayedChampion}}</span><span class="k">most played · {{.MostPlayedChampionGames}} games</span></div>
 </div>
 {{end}}
@@ -58,7 +57,6 @@
     <div class="summary-name"><b>{{.ChampionName}}</b><span>{{.Games}} games · {{.WinRatePercent}}% wr</span></div>
     <div class="mini-stat"><b>{{printf "%.2f" .AverageKDA}}</b><span>kda</span></div>
     <div class="mini-stat"><b>{{formatDecimal .AverageCSPerMinute}}</b><span>cs/min</span></div>
-    <div class="mini-stat"><b>{{formatDecimalDelta .AverageCSDeltaFirst10}}</b><span>csΔ@10</span></div>
   </div>
   {{end}}
 </div>
@@ -96,7 +94,6 @@
       <div class="stat"><span class="v">{{.CS}}</span><br><span class="k">cs</span></div>
       <div class="stat"><span class="v">{{formatDecimal .CSPerMinute}}</span><br><span class="k">cs/min</span></div>
       <div class="stat"><span class="v">{{with .LaneMinionsFirst10Minutes}}{{.}}{{else}}—{{end}}</span><br><span class="k">cs@10m</span></div>
-      <div class="stat"><span class="v">{{formatCSDelta .CSDeltaFirst10Minutes}}</span><br><span class="k">csΔ@10</span></div>
       <div class="stat"><span class="v">{{formatPercent .KillParticipationPercent}}</span><br><span class="k">kp</span></div>
     </div>
   </a>

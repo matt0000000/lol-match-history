@@ -49,22 +49,10 @@ func hashEmbeddedFile(name string) string {
 // Tests use it too, so they exercise the same template set the server does.
 func parseTemplates() (*template.Template, error) {
 	return template.New("").Funcs(template.FuncMap{
-		"styleURL":           func() string { return "/static/style.css?v=" + styleVersion },
-		"formatCSDelta":      formatCSDelta,
-		"formatDecimal":      formatDecimal,
-		"formatDecimalDelta": formatDecimalDelta,
-		"formatPercent":      formatPercent,
+		"styleURL":      func() string { return "/static/style.css?v=" + styleVersion },
+		"formatDecimal": formatDecimal,
+		"formatPercent": formatPercent,
 	}).ParseFS(webFiles, "web/templates/*.tmpl")
-}
-
-func formatCSDelta(delta *int) string {
-	if delta == nil {
-		return "—"
-	}
-	if *delta > 0 {
-		return "+" + strconv.Itoa(*delta)
-	}
-	return strconv.Itoa(*delta)
 }
 
 func formatDecimal(value *float64) string {
@@ -72,17 +60,6 @@ func formatDecimal(value *float64) string {
 		return "—"
 	}
 	return strconv.FormatFloat(*value, 'f', 1, 64)
-}
-
-func formatDecimalDelta(value *float64) string {
-	if value == nil {
-		return "—"
-	}
-	formatted := strconv.FormatFloat(*value, 'f', 1, 64)
-	if *value > 0 {
-		return "+" + formatted
-	}
-	return formatted
 }
 
 func formatPercent(value *int) string {
@@ -109,7 +86,6 @@ type RecentSummaryView struct {
 	WinRatePercent          int
 	AverageKDA              float64
 	AverageCSPerMinute      *float64
-	AverageCSDeltaFirst10   *float64
 	MostPlayedChampion      string
 	MostPlayedChampionGames int
 	Champions               []ChampionSummaryView
@@ -117,14 +93,13 @@ type RecentSummaryView struct {
 }
 
 type ChampionSummaryView struct {
-	ChampionName          string
-	ChampionIconURL       string
-	Games                 int
-	Wins                  int
-	WinRatePercent        int
-	AverageKDA            float64
-	AverageCSPerMinute    *float64
-	AverageCSDeltaFirst10 *float64
+	ChampionName       string
+	ChampionIconURL    string
+	Games              int
+	Wins               int
+	WinRatePercent     int
+	AverageKDA         float64
+	AverageCSPerMinute *float64
 }
 
 type RoleSummaryView struct {
@@ -167,7 +142,6 @@ type MatchView struct {
 	CS                        int
 	CSPerMinute               *float64
 	LaneMinionsFirst10Minutes *int
-	CSDeltaFirst10Minutes     *int
 	KillParticipationPercent  *int
 	Gold                      int
 	ItemIconURLs              []string
@@ -221,7 +195,6 @@ type PlayerStatsView struct {
 	CS                        int
 	CSPerMinute               *float64
 	LaneMinionsFirst10Minutes *int
-	CSDeltaFirst10Minutes     *int
 	KillParticipationPercent  *int
 	Gold                      int
 	GoldPerMinute             *float64
@@ -429,8 +402,8 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 	champions := make(map[string]*championSummaryAggregate)
 	roles := make(map[string]*roleSummaryAggregate)
 	var kills, deaths, assists int
-	var csPerMinuteTotal, csDeltaTotal float64
-	var csPerMinuteGames, csDeltaGames int
+	var csPerMinuteTotal float64
+	var csPerMinuteGames int
 
 	for i, match := range matches {
 		if match.Win {
@@ -442,10 +415,6 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 		if match.CSPerMinute != nil {
 			csPerMinuteTotal += *match.CSPerMinute
 			csPerMinuteGames++
-		}
-		if match.CSDeltaFirst10Minutes != nil {
-			csDeltaTotal += float64(*match.CSDeltaFirst10Minutes)
-			csDeltaGames++
 		}
 		if match.ChampionName != "" {
 			agg := champions[match.ChampionName]
@@ -463,10 +432,6 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 			if match.CSPerMinute != nil {
 				agg.CSPerMinuteTotal += *match.CSPerMinute
 				agg.CSPerMinuteGames++
-			}
-			if match.CSDeltaFirst10Minutes != nil {
-				agg.CSDeltaTotal += float64(*match.CSDeltaFirst10Minutes)
-				agg.CSDeltaGames++
 			}
 		}
 		if match.RoleLabel != "" && match.RoleLabel != "Unknown" {
@@ -489,10 +454,6 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 		average := csPerMinuteTotal / float64(csPerMinuteGames)
 		summary.AverageCSPerMinute = &average
 	}
-	if csDeltaGames > 0 {
-		average := csDeltaTotal / float64(csDeltaGames)
-		summary.AverageCSDeltaFirst10 = &average
-	}
 	summary.Champions = championSummaryViews(champions)
 	if len(summary.Champions) > 0 {
 		summary.MostPlayedChampion = summary.Champions[0].ChampionName
@@ -505,8 +466,8 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 type championSummaryAggregate struct {
 	ChampionName, ChampionIconURL                  string
 	Games, Wins, Kills, Deaths, Assists, FirstSeen int
-	CSPerMinuteTotal, CSDeltaTotal                 float64
-	CSPerMinuteGames, CSDeltaGames                 int
+	CSPerMinuteTotal                               float64
+	CSPerMinuteGames                               int
 }
 
 func championSummaryViews(aggregates map[string]*championSummaryAggregate) []ChampionSummaryView {
@@ -534,10 +495,6 @@ func championSummaryViews(aggregates map[string]*championSummaryAggregate) []Cha
 		if aggregate.CSPerMinuteGames > 0 {
 			average := aggregate.CSPerMinuteTotal / float64(aggregate.CSPerMinuteGames)
 			view.AverageCSPerMinute = &average
-		}
-		if aggregate.CSDeltaGames > 0 {
-			average := aggregate.CSDeltaTotal / float64(aggregate.CSDeltaGames)
-			view.AverageCSDeltaFirst10 = &average
 		}
 		views = append(views, view)
 	}
@@ -1021,7 +978,6 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		CS:                        player.TotalMinionsKilled + player.NeutralMinionsKilled,
 		CSPerMinute:               csPerMinute(player.TotalMinionsKilled+player.NeutralMinionsKilled, dto.Info.GameDuration),
 		LaneMinionsFirst10Minutes: player.Challenges.LaneMinionsFirst10Minutes,
-		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(player, dto.Info.Participants),
 		KillParticipationPercent:  killParticipationPercent(player, dto.Info.Participants),
 		Gold:                      player.GoldEarned,
 		ItemIconURLs:              make([]string, 7),
@@ -1314,7 +1270,6 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, participa
 		CS:                        p.TotalMinionsKilled + p.NeutralMinionsKilled,
 		CSPerMinute:               csPerMinute(p.TotalMinionsKilled+p.NeutralMinionsKilled, duration),
 		LaneMinionsFirst10Minutes: p.Challenges.LaneMinionsFirst10Minutes,
-		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(p, participants),
 		KillParticipationPercent:  killParticipationPercent(p, participants),
 		Gold:                      p.GoldEarned,
 		GoldPerMinute:             statPerMinute(p.GoldEarned, duration),
