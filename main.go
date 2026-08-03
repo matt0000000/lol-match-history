@@ -50,6 +50,8 @@ func parseTemplates() (*template.Template, error) {
 	return template.New("").Funcs(template.FuncMap{
 		"styleURL":      func() string { return "/static/style.css?v=" + styleVersion },
 		"formatCSDelta": formatCSDelta,
+		"formatDecimal": formatDecimal,
+		"formatPercent": formatPercent,
 	}).ParseFS(webFiles, "web/templates/*.tmpl")
 }
 
@@ -61,6 +63,20 @@ func formatCSDelta(delta *int) string {
 		return "+" + strconv.Itoa(*delta)
 	}
 	return strconv.Itoa(*delta)
+}
+
+func formatDecimal(value *float64) string {
+	if value == nil {
+		return "—"
+	}
+	return strconv.FormatFloat(*value, 'f', 1, 64)
+}
+
+func formatPercent(value *int) string {
+	if value == nil {
+		return "—"
+	}
+	return strconv.Itoa(*value) + "%"
 }
 
 type PageData struct {
@@ -102,8 +118,10 @@ type MatchView struct {
 	Deaths                    int
 	Assists                   int
 	CS                        int
+	CSPerMinute               *float64
 	LaneMinionsFirst10Minutes *int
 	CSDeltaFirst10Minutes     *int
+	KillParticipationPercent  *int
 	Gold                      int
 	ItemIconURLs              []string
 	SummonerSpellIconURLs     []string
@@ -139,8 +157,10 @@ type PlayerStatsView struct {
 	Deaths                    int
 	Assists                   int
 	CS                        int
+	CSPerMinute               *float64
 	LaneMinionsFirst10Minutes *int
 	CSDeltaFirst10Minutes     *int
+	KillParticipationPercent  *int
 	Gold                      int
 	Damage                    int
 	DamagePercent             int
@@ -694,8 +714,10 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		Deaths:                    player.Deaths,
 		Assists:                   player.Assists,
 		CS:                        player.TotalMinionsKilled + player.NeutralMinionsKilled,
+		CSPerMinute:               csPerMinute(player.TotalMinionsKilled+player.NeutralMinionsKilled, dto.Info.GameDuration),
 		LaneMinionsFirst10Minutes: player.Challenges.LaneMinionsFirst10Minutes,
 		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(player, dto.Info.Participants),
+		KillParticipationPercent:  killParticipationPercent(player, dto.Info.Participants),
 		Gold:                      player.GoldEarned,
 		ItemIconURLs:              make([]string, 7),
 		SummonerSpellIconURLs:     make([]string, 2),
@@ -733,7 +755,7 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.T
 		TimeAgoLabel:  timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
 	}
 	for _, p := range dto.Info.Participants {
-		player := c.playerStatsView(version, p, dto.Info.Participants, me, region, maxDamage)
+		player := c.playerStatsView(version, p, dto.Info.Participants, dto.Info.GameDuration, me, region, maxDamage)
 		if p.TeamID == team1ID {
 			if len(view.Team1.Players) == 0 {
 				view.Team1.Win = p.Win
@@ -757,7 +779,7 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.T
 	return view
 }
 
-func (c *RiotClient) playerStatsView(version string, p participantDTO, participants []participantDTO, me, region string, maxDamage int) PlayerStatsView {
+func (c *RiotClient) playerStatsView(version string, p participantDTO, participants []participantDTO, duration int, me, region string, maxDamage int) PlayerStatsView {
 	damagePercent := 0
 	if maxDamage > 0 {
 		damagePercent = int(math.Round(float64(p.TotalDamageDealtToChampions) * 100 / float64(maxDamage)))
@@ -777,8 +799,10 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, participa
 		Deaths:                    p.Deaths,
 		Assists:                   p.Assists,
 		CS:                        p.TotalMinionsKilled + p.NeutralMinionsKilled,
+		CSPerMinute:               csPerMinute(p.TotalMinionsKilled+p.NeutralMinionsKilled, duration),
 		LaneMinionsFirst10Minutes: p.Challenges.LaneMinionsFirst10Minutes,
 		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(p, participants),
+		KillParticipationPercent:  killParticipationPercent(p, participants),
 		Gold:                      p.GoldEarned,
 		Damage:                    p.TotalDamageDealtToChampions,
 		DamagePercent:             damagePercent,
@@ -820,6 +844,41 @@ func csDeltaFirst10Minutes(player participantDTO, participants []participantDTO)
 
 	delta := *player.Challenges.LaneMinionsFirst10Minutes - *opponent.Challenges.LaneMinionsFirst10Minutes
 	return &delta
+}
+
+func csPerMinute(cs, duration int) *float64 {
+	if duration <= 0 {
+		return nil
+	}
+	seconds := float64(duration)
+	if seconds > 12*60*60 {
+		seconds /= 1000
+	}
+	if seconds <= 0 {
+		return nil
+	}
+	value := math.Round(float64(cs)/(seconds/60)*10) / 10
+	return &value
+}
+
+func killParticipationPercent(player participantDTO, participants []participantDTO) *int {
+	teamKills := 0
+	for _, participant := range participants {
+		if participant.TeamID == player.TeamID {
+			teamKills += participant.Kills
+		}
+	}
+	if teamKills <= 0 {
+		return nil
+	}
+	value := int(math.Round(float64(player.Kills+player.Assists) * 100 / float64(teamKills)))
+	if value < 0 {
+		value = 0
+	}
+	if value > 100 {
+		value = 100
+	}
+	return &value
 }
 
 func (c *RiotClient) championURL(version, name string) string {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"html/template"
 	"io/fs"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -141,6 +142,12 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	}
 	if m.CSDeltaFirst10Minutes == nil || *m.CSDeltaFirst10Minutes != 73 {
 		t.Fatalf("list 10m CS delta = %v, want pointer to 73", m.CSDeltaFirst10Minutes)
+	}
+	if m.CSPerMinute == nil || math.Abs(*m.CSPerMinute-6.2) > 0.001 {
+		t.Fatalf("list CS/min = %v, want 6.2", m.CSPerMinute)
+	}
+	if m.KillParticipationPercent == nil || *m.KillParticipationPercent != 100 {
+		t.Fatalf("list KP = %v, want capped 100%%", m.KillParticipationPercent)
 	}
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
@@ -301,6 +308,12 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	}
 	if p.CSDeltaFirst10Minutes == nil || *p.CSDeltaFirst10Minutes != 73 {
 		t.Fatalf("searched player 10m CS delta = %v, want pointer to 73", p.CSDeltaFirst10Minutes)
+	}
+	if p.CSPerMinute == nil || math.Abs(*p.CSPerMinute-6.2) > 0.001 {
+		t.Fatalf("searched player CS/min = %v, want 6.2", p.CSPerMinute)
+	}
+	if p.KillParticipationPercent == nil || *p.KillParticipationPercent != 100 {
+		t.Fatalf("searched player KP = %v, want capped 100%%", p.KillParticipationPercent)
 	}
 	if detail.Team1.Players[1].LaneMinionsFirst10Minutes != nil {
 		t.Fatalf("ally 10m CS = %v, want nil", detail.Team1.Players[1].LaneMinionsFirst10Minutes)
@@ -466,20 +479,24 @@ func TestEmbeddedIndexTemplateRendersRedesignedMatchStats(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"123", "cs", "456", "gold"} {
+	for _, want := range []string{"123", "cs", "cs/min", "cs@10m", "csΔ@10", "kp"} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
 		}
+	}
+	if strings.Contains(rr.Body.String(), `<span class="k">gold</span>`) {
+		t.Fatalf("compact history row still renders raw gold: %s", rr.Body.String())
 	}
 }
 
 func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
-	seventyThree, twelve, negativeEight, zero := 73, 12, -8, 0
+	seventyThree, twelve, negativeEight, zero, ninety := 73, 12, -8, 0, 90
+	sixPointTwo := 6.2
 	data := PageData{
 		Profile: &ProfileView{},
 		Matches: []MatchView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
 			{},
@@ -498,6 +515,10 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<span class="v">-8</span><br><span class="k">csΔ@10</span>`,
 		`<span class="v">0</span><br><span class="k">csΔ@10</span>`,
 		`<span class="v">—</span><br><span class="k">csΔ@10</span>`,
+		`<span class="v">6.2</span><br><span class="k">cs/min</span>`,
+		`<span class="v">—</span><br><span class="k">cs/min</span>`,
+		`<span class="v">90%</span><br><span class="k">kp</span>`,
+		`<span class="v">—</span><br><span class="k">kp</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index body does not contain %q: %s", want, body)
@@ -507,11 +528,12 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 
 func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
-	seventyThree, twelve, negativeEight, zero := 73, 12, -8, 0
+	seventyThree, twelve, negativeEight, zero, ninety := 73, 12, -8, 0, 90
+	sixPointTwo := 6.2
 	data := MatchDetailView{
 		GameModeLabel: "Ranked Solo/Duo",
 		Team1: TeamView{Win: true, Players: []PlayerStatsView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
 			{},
@@ -525,11 +547,15 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	for _, want := range []string{
 		`<th>cs@10m</th>`,
 		`<th>csΔ@10</th>`,
+		`<th>cs/min</th>`,
+		`<th>kp</th>`,
 		`<td class="num-cell">73</td>`,
 		`<td class="num-cell">&#43;12</td>`,
 		`<td class="num-cell">-8</td>`,
 		`<td class="num-cell">0</td>`,
 		`<td class="num-cell">—</td>`,
+		`<td class="num-cell">6.2</td>`,
+		`<td class="num-cell">90%</td>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("detail body does not contain %q: %s", want, body)
@@ -592,6 +618,49 @@ func TestCSDeltaFirst10MinutesRequiresOneReportedLaneOpponent(t *testing.T) {
 				t.Fatalf("csDeltaFirst10Minutes() = %v, want %d", got, *tt.want)
 			}
 		})
+	}
+}
+
+func TestCSPerMinute(t *testing.T) {
+	tests := []struct {
+		name       string
+		cs         int
+		duration   int
+		want       float64
+		wantAbsent bool
+	}{
+		{name: "seconds", cs: 201, duration: 1934, want: 6.2},
+		{name: "legacy milliseconds", cs: 180, duration: 1_800_000, want: 6.0},
+		{name: "zero duration", cs: 100, duration: 0, wantAbsent: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := csPerMinute(tt.cs, tt.duration)
+			if tt.wantAbsent {
+				if got != nil {
+					t.Fatalf("csPerMinute() = %v, want nil", *got)
+				}
+				return
+			}
+			if got == nil || math.Abs(*got-tt.want) > 0.001 {
+				t.Fatalf("csPerMinute() = %v, want %.1f", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestKillParticipationPercent(t *testing.T) {
+	players := []participantDTO{
+		{PUUID: "me", TeamID: 100, Kills: 3, Assists: 6},
+		{PUUID: "ally", TeamID: 100, Kills: 7},
+		{PUUID: "enemy", TeamID: 200, Kills: 4},
+	}
+	got := killParticipationPercent(players[0], players)
+	if got == nil || *got != 90 {
+		t.Fatalf("killParticipationPercent() = %v, want 90", got)
+	}
+	if got := killParticipationPercent(participantDTO{TeamID: 300}, players); got != nil {
+		t.Fatalf("zero-team-kill participation = %v, want nil", *got)
 	}
 }
 
