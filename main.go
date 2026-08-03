@@ -48,10 +48,11 @@ func hashEmbeddedFile(name string) string {
 // Tests use it too, so they exercise the same template set the server does.
 func parseTemplates() (*template.Template, error) {
 	return template.New("").Funcs(template.FuncMap{
-		"styleURL":      func() string { return "/static/style.css?v=" + styleVersion },
-		"formatCSDelta": formatCSDelta,
-		"formatDecimal": formatDecimal,
-		"formatPercent": formatPercent,
+		"styleURL":           func() string { return "/static/style.css?v=" + styleVersion },
+		"formatCSDelta":      formatCSDelta,
+		"formatDecimal":      formatDecimal,
+		"formatDecimalDelta": formatDecimalDelta,
+		"formatPercent":      formatPercent,
 	}).ParseFS(webFiles, "web/templates/*.tmpl")
 }
 
@@ -72,6 +73,17 @@ func formatDecimal(value *float64) string {
 	return strconv.FormatFloat(*value, 'f', 1, 64)
 }
 
+func formatDecimalDelta(value *float64) string {
+	if value == nil {
+		return "—"
+	}
+	formatted := strconv.FormatFloat(*value, 'f', 1, 64)
+	if *value > 0 {
+		return "+" + formatted
+	}
+	return formatted
+}
+
 func formatPercent(value *int) string {
 	if value == nil {
 		return "—"
@@ -85,7 +97,20 @@ type PageData struct {
 	Error            string
 	LastUpdatedLabel string
 	Profile          *ProfileView
+	RecentSummary    *RecentSummaryView
 	Matches          []MatchView
+}
+
+type RecentSummaryView struct {
+	Games                   int
+	Wins                    int
+	Losses                  int
+	WinRatePercent          int
+	AverageKDA              float64
+	AverageCSPerMinute      *float64
+	AverageCSDeltaFirst10   *float64
+	MostPlayedChampion      string
+	MostPlayedChampionGames int
 }
 
 type ProfileView struct {
@@ -345,7 +370,64 @@ func (a *App) currentTime() time.Time {
 func applySnapshot(data *PageData, snapshot SearchSnapshot, now time.Time) {
 	data.Profile = snapshot.Profile
 	data.Matches = snapshot.Matches
+	data.RecentSummary = recentSummary(snapshot.Matches)
 	data.LastUpdatedLabel = "Updated " + timeAgoLabel(snapshot.UpdatedAt, now)
+}
+
+func recentSummary(matches []MatchView) *RecentSummaryView {
+	if len(matches) == 0 {
+		return nil
+	}
+
+	summary := &RecentSummaryView{Games: len(matches)}
+	championGames := make(map[string]int)
+	championFirstSeen := make(map[string]int)
+	var kills, deaths, assists int
+	var csPerMinuteTotal, csDeltaTotal float64
+	var csPerMinuteGames, csDeltaGames int
+
+	for i, match := range matches {
+		if match.Win {
+			summary.Wins++
+		}
+		kills += match.Kills
+		deaths += match.Deaths
+		assists += match.Assists
+		if match.CSPerMinute != nil {
+			csPerMinuteTotal += *match.CSPerMinute
+			csPerMinuteGames++
+		}
+		if match.CSDeltaFirst10Minutes != nil {
+			csDeltaTotal += float64(*match.CSDeltaFirst10Minutes)
+			csDeltaGames++
+		}
+		if match.ChampionName != "" {
+			if _, ok := championFirstSeen[match.ChampionName]; !ok {
+				championFirstSeen[match.ChampionName] = i
+			}
+			championGames[match.ChampionName]++
+		}
+	}
+
+	summary.Losses = summary.Games - summary.Wins
+	summary.WinRatePercent = int(math.Round(float64(summary.Wins) * 100 / float64(summary.Games)))
+	summary.AverageKDA = float64(kills+assists) / float64(max(deaths, 1))
+	if csPerMinuteGames > 0 {
+		average := csPerMinuteTotal / float64(csPerMinuteGames)
+		summary.AverageCSPerMinute = &average
+	}
+	if csDeltaGames > 0 {
+		average := csDeltaTotal / float64(csDeltaGames)
+		summary.AverageCSDeltaFirst10 = &average
+	}
+	for champion, games := range championGames {
+		if games > summary.MostPlayedChampionGames ||
+			(games == summary.MostPlayedChampionGames && championFirstSeen[champion] < championFirstSeen[summary.MostPlayedChampion]) {
+			summary.MostPlayedChampion = champion
+			summary.MostPlayedChampionGames = games
+		}
+	}
+	return summary
 }
 
 type RiotClient struct {

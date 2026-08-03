@@ -267,6 +267,77 @@ func TestHandlerSuccessfulRefreshReplacesCachedSnapshot(t *testing.T) {
 	}
 }
 
+func TestRecentSummaryUsesAvailableLastTwentyMatchStats(t *testing.T) {
+	csSix, csEight := 6.0, 8.0
+	deltaTen, deltaNegativeFour := 10, -4
+	matches := []MatchView{
+		{Win: true, ChampionName: "Ahri", Kills: 10, Deaths: 2, Assists: 8, CSPerMinute: &csSix, CSDeltaFirst10Minutes: &deltaTen},
+		{Win: false, ChampionName: "Lux", Kills: 2, Deaths: 4, Assists: 6, CSPerMinute: &csEight},
+		{Win: true, ChampionName: "Ahri", Kills: 6, Deaths: 0, Assists: 4, CSDeltaFirst10Minutes: &deltaNegativeFour},
+	}
+
+	got := recentSummary(matches)
+	if got == nil {
+		t.Fatal("recentSummary returned nil")
+	}
+	if got.Games != 3 || got.Wins != 2 || got.Losses != 1 || got.WinRatePercent != 67 {
+		t.Fatalf("record = %#v", got)
+	}
+	if math.Abs(got.AverageKDA-6) > 0.001 {
+		t.Fatalf("AverageKDA = %v, want 6.0", got.AverageKDA)
+	}
+	if got.AverageCSPerMinute == nil || math.Abs(*got.AverageCSPerMinute-7) > 0.001 {
+		t.Fatalf("AverageCSPerMinute = %v, want 7.0", got.AverageCSPerMinute)
+	}
+	if got.AverageCSDeltaFirst10 == nil || math.Abs(*got.AverageCSDeltaFirst10-3) > 0.001 {
+		t.Fatalf("AverageCSDeltaFirst10 = %v, want 3.0", got.AverageCSDeltaFirst10)
+	}
+	if got.MostPlayedChampion != "Ahri" || got.MostPlayedChampionGames != 2 {
+		t.Fatalf("most played = %q/%d, want Ahri/2", got.MostPlayedChampion, got.MostPlayedChampionGames)
+	}
+}
+
+func TestRecentSummaryHandlesMissingOptionalStatsAndTiesDeterministically(t *testing.T) {
+	got := recentSummary([]MatchView{
+		{ChampionName: "Lux", Kills: 1},
+		{ChampionName: "Ahri", Assists: 1},
+	})
+	if got.AverageCSPerMinute != nil || got.AverageCSDeltaFirst10 != nil {
+		t.Fatalf("missing averages = %v/%v, want nil", got.AverageCSPerMinute, got.AverageCSDeltaFirst10)
+	}
+	if got.MostPlayedChampion != "Lux" {
+		t.Fatalf("tie winner = %q, want first-seen Lux", got.MostPlayedChampion)
+	}
+	if got.AverageKDA != 2 {
+		t.Fatalf("zero-death KDA = %v, want 2", got.AverageKDA)
+	}
+	if recentSummary(nil) != nil {
+		t.Fatal("empty summary should be nil")
+	}
+}
+
+func TestEmbeddedIndexTemplateRendersRecentSummary(t *testing.T) {
+	tmpl := template.Must(parseTemplates())
+	cs, delta := 7.2, 3.0
+	data := PageData{
+		Profile: &ProfileView{},
+		RecentSummary: &RecentSummaryView{
+			Games: 20, Wins: 12, Losses: 8, WinRatePercent: 60,
+			AverageKDA: 3.45, AverageCSPerMinute: &cs, AverageCSDeltaFirst10: &delta,
+			MostPlayedChampion: "Ahri", MostPlayedChampionGames: 6,
+		},
+	}
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "content", data); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"last 20 matches", "12w 8l", "60%", "3.45", "7.2", "&#43;3.0", "Ahri", "most played · 6 games"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Fatalf("summary does not contain %q: %s", want, buf.String())
+		}
+	}
+}
+
 func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	var requestURI string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

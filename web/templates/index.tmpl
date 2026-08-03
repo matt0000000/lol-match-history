@@ -21,6 +21,18 @@
   </div>
 </div>
 
+{{with .RecentSummary}}
+<div class="section-label">last {{.Games}} matches<span class="rule"></span></div>
+<div class="panel recent-summary">
+  <div class="summary-stat"><span class="v">{{.Wins}}w {{.Losses}}l</span><span class="k">record</span></div>
+  <div class="summary-stat"><span class="v">{{.WinRatePercent}}%</span><span class="k">win rate</span></div>
+  <div class="summary-stat"><span class="v">{{printf "%.2f" .AverageKDA}}</span><span class="k">avg kda</span></div>
+  <div class="summary-stat"><span class="v">{{formatDecimal .AverageCSPerMinute}}</span><span class="k">avg cs/min</span></div>
+  <div class="summary-stat"><span class="v">{{formatDecimalDelta .AverageCSDeltaFirst10}}</span><span class="k">avg csΔ@10</span></div>
+  <div class="summary-stat champion-summary"><span class="v">{{.MostPlayedChampion}}</span><span class="k">most played · {{.MostPlayedChampionGames}} games</span></div>
+</div>
+{{end}}
+
 <div class="section-label">ranked<span class="rule"></span></div>
 <div class="panel">
   <div class="panel-row rank-row">
