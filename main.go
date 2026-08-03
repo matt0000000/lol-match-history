@@ -23,6 +23,8 @@ import (
 )
 
 const defaultDataDragonVersion = "16.14.1"
+const defaultMatchCount = 20
+const maxMatchCount = 100
 
 // riotVerificationToken proves domain ownership for the Riot Developer Portal
 // API key application. Safe to remove once the application is approved.
@@ -70,13 +72,17 @@ func formatPercent(value *int) string {
 }
 
 type PageData struct {
-	Query            string
-	Region           string
-	Error            string
-	LastUpdatedLabel string
-	Profile          *ProfileView
-	RecentSummary    *RecentSummaryView
-	Matches          []MatchView
+	Query             string
+	Region            string
+	Error             string
+	LastUpdatedLabel  string
+	Profile           *ProfileView
+	RecentSummary     *RecentSummaryView
+	Matches           []MatchView
+	RequestedMatches  int
+	NextMatchCount    int
+	CanLoadMore       bool
+	SupportsExpansion bool
 }
 
 type RecentSummaryView struct {
@@ -217,6 +223,10 @@ type Searcher interface {
 	Search(context.Context, string, string, time.Time) (*ProfileView, []MatchView, error)
 }
 
+type MatchCountSearcher interface {
+	SearchCount(context.Context, string, string, time.Time, int) (*ProfileView, []MatchView, error)
+}
+
 type MatchLoader interface {
 	MatchDetail(context.Context, string, string, time.Time) (*MatchDetailView, error)
 }
@@ -333,12 +343,14 @@ func (a *App) handleMatchDetail(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	now := a.currentTime()
 	data := PageData{
-		Query:  strings.TrimSpace(r.URL.Query().Get("q")),
-		Region: strings.ToLower(strings.TrimSpace(r.URL.Query().Get("region"))),
+		Query:            strings.TrimSpace(r.URL.Query().Get("q")),
+		Region:           strings.ToLower(strings.TrimSpace(r.URL.Query().Get("region"))),
+		RequestedMatches: requestedMatchCount(r.URL.Query().Get("count")),
 	}
 	if data.Region == "" {
 		data.Region = "na1"
 	}
+	_, data.SupportsExpansion = a.Searcher.(MatchCountSearcher)
 	if data.Query != "" {
 		if !supportedRegion(data.Region) {
 			data.Error = "Choose a supported region."
@@ -347,7 +359,8 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		} else {
 			cached, hasCached := a.Cache.Get(data.Query, data.Region)
 			refresh := r.URL.Query().Get("refresh") == "1"
-			if hasCached && !refresh {
+			needsMore := data.SupportsExpansion && hasCached && len(cached.Matches) < data.RequestedMatches
+			if hasCached && !refresh && !needsMore {
 				applySnapshot(&data, cached, now)
 			} else if a.Searcher == nil {
 				data.Error = "Search is temporarily unavailable."
@@ -355,7 +368,7 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 					applySnapshot(&data, cached, now)
 				}
 			} else {
-				profile, matches, err := a.Searcher.Search(r.Context(), data.Query, data.Region, now)
+				profile, matches, err := searchWithCount(r.Context(), a.Searcher, data.Query, data.Region, now, data.RequestedMatches)
 				if err != nil {
 					data.Error = err.Error()
 					if hasCached {
@@ -391,6 +404,31 @@ func applySnapshot(data *PageData, snapshot SearchSnapshot, now time.Time) {
 	data.Matches = snapshot.Matches
 	data.RecentSummary = recentSummary(snapshot.Matches)
 	data.LastUpdatedLabel = "Updated " + timeAgoLabel(snapshot.UpdatedAt, now)
+	loaded := len(snapshot.Matches)
+	data.RequestedMatches = max(data.RequestedMatches, loaded)
+	if data.SupportsExpansion && loaded < maxMatchCount && loaded > 0 {
+		data.CanLoadMore = true
+		if data.RequestedMatches > loaded {
+			data.NextMatchCount = data.RequestedMatches
+		} else {
+			data.NextMatchCount = min(maxMatchCount, loaded+10)
+		}
+	}
+}
+
+func requestedMatchCount(raw string) int {
+	count, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || count < defaultMatchCount {
+		return defaultMatchCount
+	}
+	return min(count, maxMatchCount)
+}
+
+func searchWithCount(ctx context.Context, searcher Searcher, riotID, region string, now time.Time, count int) (*ProfileView, []MatchView, error) {
+	if expanded, ok := searcher.(MatchCountSearcher); ok {
+		return expanded.SearchCount(ctx, riotID, region, now, count)
+	}
+	return searcher.Search(ctx, riotID, region, now)
 }
 
 func recentSummary(matches []MatchView) *RecentSummaryView {
@@ -683,7 +721,7 @@ func NewRiotClient(apiKey string) *RiotClient {
 		},
 		DataDragonBase:     "https://ddragon.leagueoflegends.com",
 		DataDragonVer:      defaultDataDragonVersion,
-		MatchCount:         20,
+		MatchCount:         defaultMatchCount,
 		MinRequestInterval: 60 * time.Millisecond,
 		nextRequest:        make(map[string]time.Time),
 		matchCache:         make(map[string]matchDTO),
@@ -692,6 +730,10 @@ func NewRiotClient(apiKey string) *RiotClient {
 }
 
 func (c *RiotClient) Search(ctx context.Context, riotID, region string, now time.Time) (*ProfileView, []MatchView, error) {
+	return c.SearchCount(ctx, riotID, region, now, c.MatchCount)
+}
+
+func (c *RiotClient) SearchCount(ctx context.Context, riotID, region string, now time.Time, count int) (*ProfileView, []MatchView, error) {
 	if strings.TrimSpace(c.APIKey) == "" {
 		return nil, nil, errors.New("Riot API key is not configured.")
 	}
@@ -711,7 +753,7 @@ func (c *RiotClient) Search(ctx context.Context, riotID, region string, now time
 	if err != nil {
 		return nil, nil, err
 	}
-	matchIDs, err := c.listMatchIDs(ctx, region, account.PUUID)
+	matchIDs, err := c.listMatchIDs(ctx, region, account.PUUID, count)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -776,11 +818,11 @@ func rankView(entry leagueEntryDTO) *RankView {
 	}
 }
 
-func (c *RiotClient) listMatchIDs(ctx context.Context, region, puuid string) ([]string, error) {
-	count := c.MatchCount
+func (c *RiotClient) listMatchIDs(ctx context.Context, region, puuid string, count int) ([]string, error) {
 	if count <= 0 {
-		count = 10
+		count = defaultMatchCount
 	}
+	count = min(count, maxMatchCount)
 	endpoint := c.RegionalBaseURL(region) + "/lol/match/v5/matches/by-puuid/" + url.PathEscape(puuid) + "/ids?start=0&count=" + strconv.Itoa(count)
 	var out []string
 	err := c.getJSON(ctx, endpoint, &out)

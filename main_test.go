@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"math"
@@ -269,6 +270,50 @@ func TestHandlerSuccessfulRefreshReplacesCachedSnapshot(t *testing.T) {
 	}
 }
 
+func TestHandlerLoadsTenMoreMatchesAndCachesExpandedResult(t *testing.T) {
+	tmpl := template.Must(template.New("layout").Parse(`{{define "layout"}}{{len .Matches}}|{{.RequestedMatches}}|{{.NextMatchCount}}|{{.CanLoadMore}}{{end}}`))
+	searcher := &expandingSearcher{}
+	app := &App{Templates: tmpl, Searcher: searcher, Cache: NewSearchCache()}
+
+	request := func(target string) string {
+		rr := httptest.NewRecorder()
+		app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, target, nil))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET %s: status=%d", target, rr.Code)
+		}
+		return rr.Body.String()
+	}
+	if body := request("/?q=Faker%23KR1&region=kr"); body != "20|20|30|true" {
+		t.Fatalf("initial body = %q", body)
+	}
+	if body := request("/?q=faker%23kr1&region=kr"); body != "20|20|30|true" {
+		t.Fatalf("cached body = %q", body)
+	}
+	if body := request("/?q=Faker%23KR1&region=kr&count=30"); body != "30|30|40|true" {
+		t.Fatalf("expanded body = %q", body)
+	}
+	if body := request("/?q=FAKER%23KR1&region=kr&count=30"); body != "30|30|40|true" {
+		t.Fatalf("cached expanded body = %q", body)
+	}
+	if body := request("/?q=Faker%23KR1&region=kr"); body != "30|30|40|true" {
+		t.Fatalf("expanded cache lost its requested count: %q", body)
+	}
+	if len(searcher.counts) != 2 || searcher.counts[0] != 20 || searcher.counts[1] != 30 {
+		t.Fatalf("requested counts = %#v, want [20 30]", searcher.counts)
+	}
+}
+
+func TestRequestedMatchCountDefaultsAndCaps(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want int
+	}{{"", 20}, {"bad", 20}, {"10", 20}, {"30", 30}, {"999", 100}} {
+		if got := requestedMatchCount(tc.raw); got != tc.want {
+			t.Fatalf("requestedMatchCount(%q) = %d, want %d", tc.raw, got, tc.want)
+		}
+	}
+}
+
 func TestRecentSummaryUsesAvailableLastTwentyMatchStats(t *testing.T) {
 	csSix, csEight := 6.0, 8.0
 	matches := []MatchView{
@@ -408,6 +453,20 @@ func TestEmbeddedIndexTemplateRendersRecentSummary(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "csΔ") {
 		t.Fatalf("summary unexpectedly renders CS delta: %s", buf.String())
+	}
+}
+
+func TestEmbeddedIndexTemplateRendersLoadMoreButton(t *testing.T) {
+	tmpl := template.Must(parseTemplates())
+	data := PageData{Profile: &ProfileView{}, Query: "Faker#KR1", Region: "kr", RequestedMatches: 20, NextMatchCount: 30, CanLoadMore: true, SupportsExpansion: true}
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "content", data); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`class="load-more-form"`, `name="count" value="30"`, `[ load 10 more ]`} {
+		if !strings.Contains(buf.String(), want) {
+			t.Fatalf("load-more markup does not contain %q: %s", want, buf.String())
+		}
 	}
 }
 
@@ -881,6 +940,23 @@ type controlledSearcher struct {
 	calls       int
 	err         error
 	profileName string
+}
+
+type expandingSearcher struct {
+	counts []int
+}
+
+func (s *expandingSearcher) Search(ctx context.Context, riotID, region string, now time.Time) (*ProfileView, []MatchView, error) {
+	return s.SearchCount(ctx, riotID, region, now, defaultMatchCount)
+}
+
+func (s *expandingSearcher) SearchCount(_ context.Context, _, _ string, _ time.Time, count int) (*ProfileView, []MatchView, error) {
+	s.counts = append(s.counts, count)
+	matches := make([]MatchView, count)
+	for i := range matches {
+		matches[i].MatchID = fmt.Sprintf("KR_%d", i+1)
+	}
+	return &ProfileView{GameName: "Faker", TagLine: "KR1"}, matches, nil
 }
 
 func (s *controlledSearcher) Search(_ context.Context, _, _ string, _ time.Time) (*ProfileView, []MatchView, error) {

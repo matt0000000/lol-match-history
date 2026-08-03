@@ -234,6 +234,8 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .stat { width: 64px; text-align: right; flex: 0 0 auto; }
 .stat .k { color: var(--muted); font-size: 10px; }
 .stat.gold .v { color: var(--gold); }
+.load-more-form { margin-top: 14px; text-align: center; }
+.load-more-form .btn { min-width: 190px; }
 
 @media (max-width: 680px) {
   .match-row {

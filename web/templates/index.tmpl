@@ -14,6 +14,7 @@
     <form method="get" action="/">
       <input type="hidden" name="q" value="{{.Query}}">
       <input type="hidden" name="region" value="{{.Region}}">
+      <input type="hidden" name="count" value="{{.RequestedMatches}}">
       <input type="hidden" name="refresh" value="1">
       <button type="submit" class="btn muted">[ update ]</button>
     </form>
@@ -99,5 +100,13 @@
   </a>
 {{end}}
 </div>
+{{if .CanLoadMore}}
+<form class="load-more-form" method="get" action="/">
+  <input type="hidden" name="q" value="{{.Query}}">
+  <input type="hidden" name="region" value="{{.Region}}">
+  <input type="hidden" name="count" value="{{.NextMatchCount}}">
+  <button type="submit" class="btn muted">[ load 10 more ]</button>
+</form>
+{{end}}
 {{end}}
 {{end}}
