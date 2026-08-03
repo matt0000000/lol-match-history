@@ -216,7 +216,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .match-row { gap: 14px; flex-wrap: wrap; }
 .result-block { width: 130px; flex-shrink: 0; color: var(--muted); font-size: 12px; }
 .performance-labels { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
-.performance-tag { display: inline-block; padding: 0 4px; border: 1px solid var(--border); font-size: 10px; white-space: nowrap; }
+.performance-tag { display: inline-block; padding: 0 4px; border: 1px solid var(--border); font-size: 10px; white-space: nowrap; cursor: help; }
 .performance-tag.good { color: var(--win); border-color: var(--win); }
 .performance-tag.bad { color: var(--loss); border-color: var(--loss); }
 
@@ -301,7 +301,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .objective-strip b { color: var(--ink); }
 
 .scoreboard-panel { overflow-x: auto; overscroll-behavior-x: contain; }
-.scoretable { width: 100%; min-width: 1310px; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
+.scoretable { width: 100%; min-width: 1082px; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
 .scoretable .player-col { width: 300px; }
 .scoretable th {
   text-align: left; font-size: 11px; color: var(--muted); font-weight: normal;
@@ -357,7 +357,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
   .scoreboard-panel {
     -webkit-overflow-scrolling: touch;
   }
-  .scoretable { min-width: 1310px; font-size: 11px; }
+  .scoretable { min-width: 1082px; font-size: 11px; }
   .scoretable .player-col { width: 190px; }
   .scoretable th,
   .scoretable td { padding: 7px 10px; }

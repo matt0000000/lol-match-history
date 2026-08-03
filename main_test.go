@@ -337,6 +337,11 @@ func TestDerivePerformanceLabelsReturnsEveryMatchingCategory(t *testing.T) {
 			if !hasPerformanceLabel(labels, tc.wantLabel, tc.wantTone) {
 				t.Fatalf("derivePerformanceLabels() = %#v, want %q/%q", labels, tc.wantLabel, tc.wantTone)
 			}
+			for _, label := range labels {
+				if label.Description == "" {
+					t.Fatalf("label %q has no hover description", label.Text)
+				}
+			}
 		})
 	}
 }
@@ -653,7 +658,7 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	data := PageData{
 		Profile: &ProfileView{},
 		Matches: []MatchView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, PerformanceLabels: []PerformanceLabelView{{Text: "strong lane", Tone: "good"}, {Text: "everywhere", Tone: "good"}}},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, PerformanceLabels: []PerformanceLabelView{{Text: "strong lane", Tone: "good", Description: performanceLabelDescription("strong lane")}, {Text: "everywhere", Tone: "good", Description: performanceLabelDescription("everywhere")}}},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
 			{},
@@ -676,8 +681,8 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<span class="v">—</span><br><span class="k">cs/min</span>`,
 		`<span class="v">90%</span><br><span class="k">kp</span>`,
 		`<span class="v">—</span><br><span class="k">kp</span>`,
-		`<span class="performance-tag good">strong lane</span>`,
-		`<span class="performance-tag good">everywhere</span>`,
+		`title="Finished 10 minutes 10–19 CS ahead of the lane opponent.">strong lane</span>`,
+		`title="Participated in at least 80% of the team’s champion kills.">everywhere</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index body does not contain %q: %s", want, body)
@@ -692,7 +697,7 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	data := MatchDetailView{
 		GameModeLabel: "Ranked Solo/Duo",
 		Team1: TeamView{Win: true, Objectives: ObjectiveView{Towers: 9, Dragons: 3, Barons: 1, Heralds: 1, Grubs: 4}, Players: []PlayerStatsView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, Gold: 12000, GoldPerMinute: &sixPointTwo, Damage: 24000, DamageSharePercent: &thirtyFive, DamagePerMinute: &sixPointTwo, VisionScore: 42, VisionPerMinute: &sixPointTwo, ControlWards: 3, ObjectiveDamage: 9000, TurretDamage: 4000, PerformanceLabels: []PerformanceLabelView{{Text: "damage carry", Tone: "good"}}},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, Gold: 12000, GoldPerMinute: &sixPointTwo, Damage: 24000, DamageSharePercent: &thirtyFive, DamagePerMinute: &sixPointTwo, VisionScore: 42, VisionPerMinute: &sixPointTwo, ControlWards: 3, ObjectiveDamage: 9000, TurretDamage: 4000, PerformanceLabels: []PerformanceLabelView{{Text: "damage carry", Tone: "good", Description: performanceLabelDescription("damage carry")}}},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
 			{},
@@ -705,22 +710,16 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	body := buf.String()
 	for _, want := range []string{
 		`<th>cs@10m</th>`,
-		`<th>csΔ@10</th>`,
-		`<th>cs/min</th>`,
 		`<th>kp</th>`,
 		`<th>vision</th>`,
-		`<th>objectives</th>`,
 		`<td class="num-cell">73</td>`,
-		`<td class="num-cell">&#43;12</td>`,
-		`<td class="num-cell">-8</td>`,
 		`<td class="num-cell">0</td>`,
 		`<td class="num-cell">—</td>`,
-		`<td class="num-cell">6.2</td>`,
+		`<span>0</span><small>6.2/min</small>`,
 		`<td class="num-cell">90%</td>`,
 		`<small>35% · 6.2/min</small>`,
 		`<small>6.2/min · 3 cw</small>`,
-		`<span>9000 obj</span><small>4000 turret</small>`,
-		`<span class="performance-tag good">damage carry</span>`,
+		`title="Dealt at least 30% of the team’s champion damage.">damage carry</span>`,
 		`towers <b>9</b>`,
 		`dragons <b>3</b>`,
 		`barons <b>1</b>`,
@@ -729,6 +728,11 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("detail body does not contain %q: %s", want, body)
+		}
+	}
+	for _, unwanted := range []string{`<th>cs/min</th>`, `<th>csΔ@10</th>`, `<th>objectives</th>`, `9000 obj`, `4000 turret`} {
+		if strings.Contains(body, unwanted) {
+			t.Fatalf("detail body unexpectedly contains %q: %s", unwanted, body)
 		}
 	}
 }

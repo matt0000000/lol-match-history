@@ -78,7 +78,7 @@
 {{range .Matches}}
   <a class="panel-row match-row {{if .Win}}win{{else}}loss{{end}}" href="/match/{{.MatchID}}?me={{$.Query}}">
     <span class="tag-badge">{{if .Win}}WIN{{else}}LOSS{{end}}</span>
-    <div class="result-block">{{.GameModeLabel}}<br>{{.TimeAgoLabel}}{{with .PerformanceLabels}}<div class="performance-labels">{{range .}}<span class="performance-tag {{.Tone}}">{{.Text}}</span>{{end}}</div>{{end}}</div>
+    <div class="result-block">{{.GameModeLabel}}<br>{{.TimeAgoLabel}}{{with .PerformanceLabels}}<div class="performance-labels">{{range .}}<span class="performance-tag {{.Tone}}" title="{{.Description}}">{{.Text}}</span>{{end}}</div>{{end}}</div>
 
     <div class="champ-block">
       <img class="champ-icon-img" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">

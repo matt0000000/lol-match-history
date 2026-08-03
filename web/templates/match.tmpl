@@ -54,18 +54,15 @@
     <colgroup>
       <col class="player-col">
       <col style="width:96px">
-      <col style="width:56px">
+      <col style="width:76px">
       <col style="width:64px">
-      <col style="width:64px">
-      <col style="width:72px">
       <col style="width:52px">
       <col style="width:76px">
       <col style="width:162px">
       <col style="width:92px">
-      <col style="width:112px">
       <col style="width:164px">
     </colgroup>
-    <thead><tr><th>player</th><th>kda</th><th>cs</th><th>cs/min</th><th>cs@10m</th><th>csΔ@10</th><th>kp</th><th>gold</th><th>damage</th><th>vision</th><th>objectives</th><th>items</th></tr></thead>
+    <thead><tr><th>player</th><th>kda</th><th>cs</th><th>cs@10m</th><th>kp</th><th>gold</th><th>damage</th><th>vision</th><th>items</th></tr></thead>
     <tbody>
       {{range .Players}}
       <tr{{if .IsHighlighted}} class="me"{{end}}>
@@ -77,15 +74,13 @@
             </div>
             <div class="player-identity">
               <a class="riot-id" href="/?q={{.RiotID}}&amp;region={{.Region}}">{{.RiotID}}</a>
-              {{with .PerformanceLabels}}<div class="performance-labels">{{range .}}<span class="performance-tag {{.Tone}}">{{.Text}}</span>{{end}}</div>{{end}}
+              {{with .PerformanceLabels}}<div class="performance-labels">{{range .}}<span class="performance-tag {{.Tone}}" title="{{.Description}}">{{.Text}}</span>{{end}}</div>{{end}}
             </div>
           </div>
         </td>
         <td class="num-cell">{{.Kills}}/{{.Deaths}}/{{.Assists}}</td>
-        <td class="num-cell">{{.CS}}</td>
-        <td class="num-cell">{{formatDecimal .CSPerMinute}}</td>
+        <td class="num-cell metric-stack"><span>{{.CS}}</span><small>{{formatDecimal .CSPerMinute}}/min</small></td>
         <td class="num-cell">{{with .LaneMinionsFirst10Minutes}}{{.}}{{else}}—{{end}}</td>
-        <td class="num-cell">{{formatCSDelta .CSDeltaFirst10Minutes}}</td>
         <td class="num-cell">{{formatPercent .KillParticipationPercent}}</td>
         <td class="num-cell metric-stack"><span>{{.Gold}}</span><small>{{formatDecimal .GoldPerMinute}}/min</small></td>
         <td class="dmg-cell">
@@ -95,7 +90,6 @@
           </div>
         </td>
         <td class="num-cell metric-stack"><span>{{.VisionScore}}</span><small>{{formatDecimal .VisionPerMinute}}/min · {{.ControlWards}} cw</small></td>
-        <td class="num-cell metric-stack"><span>{{.ObjectiveDamage}} obj</span><small>{{.TurretDamage}} turret</small></td>
         <td class="items-cell">
           <div class="items-inner">
             {{range .ItemIconURLs}}{{if .}}<img class="item-slot-img" src="{{.}}" alt="">{{else}}<span class="item-slot empty"></span>{{end}}{{end}}

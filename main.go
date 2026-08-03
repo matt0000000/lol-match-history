@@ -185,8 +185,9 @@ type MatchView struct {
 }
 
 type PerformanceLabelView struct {
-	Text string
-	Tone string
+	Text        string
+	Tone        string
+	Description string
 }
 
 type MatchDetailView struct {
@@ -1079,7 +1080,9 @@ func roleLabel(position string) string {
 
 func derivePerformanceLabels(player participantDTO, participants []participantDTO, duration int) []PerformanceLabelView {
 	labels := make([]PerformanceLabelView, 0)
-	add := func(text, tone string) { labels = append(labels, PerformanceLabelView{Text: text, Tone: tone}) }
+	add := func(text, tone string) {
+		labels = append(labels, PerformanceLabelView{Text: text, Tone: tone, Description: performanceLabelDescription(text)})
+	}
 	role := roleLabel(player.TeamPosition)
 
 	if delta := csDeltaFirst10Minutes(player, participants); delta != nil {
@@ -1191,6 +1194,45 @@ func derivePerformanceLabels(player participantDTO, participants []participantDT
 		add("triple kill", "good")
 	}
 	return labels
+}
+
+var performanceLabelDescriptions = map[string]string{
+	"lane bully":         "Finished 10 minutes at least 20 CS ahead of the lane opponent.",
+	"strong lane":        "Finished 10 minutes 10–19 CS ahead of the lane opponent.",
+	"crushed in lane":    "Finished 10 minutes at least 20 CS behind the lane opponent.",
+	"weak lane":          "Finished 10 minutes 10–19 CS behind the lane opponent.",
+	"farm machine":       "Averaged at least 8 CS per minute.",
+	"good farming":       "Averaged between 7 and 8 CS per minute.",
+	"low farm":           "Averaged fewer than 5 CS per minute outside the support role.",
+	"early farmer":       "Collected at least 80 lane minions in the first 10 minutes.",
+	"everywhere":         "Participated in at least 80% of the team’s champion kills.",
+	"high participation": "Participated in 70–79% of the team’s champion kills.",
+	"low participation":  "Participated in no more than 35% of the team’s champion kills.",
+	"carry performance":  "Had at least 10 kills, 4 KDA, and 60% kill participation.",
+	"untouchable":        "Died at most once while participating in at least half of the team’s kills.",
+	"high kda":           "Finished with at least 5 KDA and 10 combined kills and assists.",
+	"bloodthirsty":       "Finished with at least 12 kills.",
+	"team player":        "Finished with at least 15 assists.",
+	"deathless":          "Finished the match without dying.",
+	"rough game":         "Died at least 10 times.",
+	"damage carry":       "Dealt at least 30% of the team’s champion damage.",
+	"heavy hitter":       "Dealt 25–29% of the team’s champion damage.",
+	"low damage":         "Dealt under 10% of team champion damage outside support or unknown roles.",
+	"gold efficient":     "Dealt at least 15,000 champion damage at 1.8 damage per gold earned.",
+	"objective focused":  "Dealt at least 10,000 damage to neutral and structure objectives.",
+	"tower pusher":       "Dealt at least 5,000 turret damage or participated in three turret takedowns.",
+	"visionary":          "Recorded strong vision per minute for the assigned role.",
+	"poor vision":        "Recorded low vision per minute for the assigned role.",
+	"control ward buyer": "Bought at least three control wards.",
+	"first blood":        "Participated in the match’s first champion kill.",
+	"solo killer":        "Recorded at least two solo kills.",
+	"pentakill":          "Recorded a pentakill.",
+	"quadra kill":        "Recorded a quadra kill.",
+	"triple kill":        "Recorded a triple kill.",
+}
+
+func performanceLabelDescription(label string) string {
+	return performanceLabelDescriptions[label]
 }
 
 func visionThresholds(role string) (good, bad float64, ok bool) {
