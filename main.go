@@ -161,7 +161,6 @@ type MatchView struct {
 	ChampionName              string
 	ChampionIconURL           string
 	RoleLabel                 string
-	PerformanceLabels         []PerformanceLabelView
 	Kills                     int
 	Deaths                    int
 	Assists                   int
@@ -171,15 +170,6 @@ type MatchView struct {
 	CSDeltaFirst10Minutes     *int
 	KillParticipationPercent  *int
 	Gold                      int
-	GoldPerMinute             *float64
-	Damage                    int
-	DamagePerMinute           *float64
-	DamageSharePercent        *int
-	VisionScore               int
-	VisionPerMinute           *float64
-	ControlWards              int
-	ObjectiveDamage           int
-	TurretDamage              int
 	ItemIconURLs              []string
 	SummonerSpellIconURLs     []string
 }
@@ -593,6 +583,8 @@ type RiotClient struct {
 	nextRequest        map[string]time.Time
 	matchCacheMu       sync.RWMutex
 	matchCache         map[string]matchDTO
+	timelineCacheMu    sync.RWMutex
+	firstBloodVictims  map[string]int
 }
 
 type accountDTO struct {
@@ -664,6 +656,7 @@ type participantDTO struct {
 	TurretTakedowns             int                      `json:"turretTakedowns"`
 	FirstBloodKill              bool                     `json:"firstBloodKill"`
 	FirstBloodAssist            bool                     `json:"firstBloodAssist"`
+	ParticipantID               int                      `json:"participantId"`
 	TripleKills                 int                      `json:"tripleKills"`
 	QuadraKills                 int                      `json:"quadraKills"`
 	PentaKills                  int                      `json:"pentaKills"`
@@ -679,6 +672,21 @@ type participantDTO struct {
 	RiotIDGameName              string                   `json:"riotIdGameName"`
 	RiotIDTagLine               string                   `json:"riotIdTagline"`
 	Challenges                  participantChallengesDTO `json:"challenges"`
+	GaveFirstBlood              bool                     `json:"-"`
+}
+
+type timelineDTO struct {
+	Info struct {
+		Frames []struct {
+			Events []timelineEventDTO `json:"events"`
+		} `json:"frames"`
+	} `json:"info"`
+}
+
+type timelineEventDTO struct {
+	Type      string `json:"type"`
+	Timestamp int64  `json:"timestamp"`
+	VictimID  int    `json:"victimId"`
 }
 
 type participantChallengesDTO struct {
@@ -699,7 +707,8 @@ func (c *RiotClient) MatchDetail(ctx context.Context, matchID, me string, now ti
 	if err != nil {
 		return nil, err
 	}
-	view := c.matchDetailView(dto, me, region, now)
+	firstBloodVictimID, _ := c.lookupFirstBloodVictimID(ctx, region, matchID)
+	view := c.matchDetailView(dto, me, region, now, firstBloodVictimID)
 	view.Query = strings.TrimSpace(me)
 	view.Region = region
 	return &view, nil
@@ -721,6 +730,7 @@ func NewRiotClient(apiKey string) *RiotClient {
 		MinRequestInterval: 60 * time.Millisecond,
 		nextRequest:        make(map[string]time.Time),
 		matchCache:         make(map[string]matchDTO),
+		firstBloodVictims:  make(map[string]int),
 	}
 }
 
@@ -881,6 +891,41 @@ func (c *RiotClient) lookupMatchDTO(ctx context.Context, region, matchID string)
 	return dto, nil
 }
 
+func (c *RiotClient) lookupFirstBloodVictimID(ctx context.Context, region, matchID string) (int, error) {
+	key := strings.ToUpper(strings.TrimSpace(matchID))
+	c.timelineCacheMu.RLock()
+	victimID, ok := c.firstBloodVictims[key]
+	c.timelineCacheMu.RUnlock()
+	if ok {
+		return victimID, nil
+	}
+
+	endpoint := c.RegionalBaseURL(region) + "/lol/match/v5/matches/" + url.PathEscape(matchID) + "/timeline"
+	var timeline timelineDTO
+	if err := c.getJSON(ctx, endpoint, &timeline); err != nil {
+		return 0, err
+	}
+	var firstTimestamp int64
+	for _, frame := range timeline.Info.Frames {
+		for _, event := range frame.Events {
+			if event.Type != "CHAMPION_KILL" || event.VictimID <= 0 {
+				continue
+			}
+			if victimID == 0 || event.Timestamp < firstTimestamp {
+				victimID = event.VictimID
+				firstTimestamp = event.Timestamp
+			}
+		}
+	}
+	c.timelineCacheMu.Lock()
+	if c.firstBloodVictims == nil {
+		c.firstBloodVictims = make(map[string]int)
+	}
+	c.firstBloodVictims[key] = victimID
+	c.timelineCacheMu.Unlock()
+	return victimID, nil
+}
+
 func (c *RiotClient) getJSON(ctx context.Context, endpoint string, dst any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -979,19 +1024,9 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		CSDeltaFirst10Minutes:     csDeltaFirst10Minutes(player, dto.Info.Participants),
 		KillParticipationPercent:  killParticipationPercent(player, dto.Info.Participants),
 		Gold:                      player.GoldEarned,
-		GoldPerMinute:             statPerMinute(player.GoldEarned, dto.Info.GameDuration),
-		Damage:                    player.TotalDamageDealtToChampions,
-		DamagePerMinute:           statPerMinute(player.TotalDamageDealtToChampions, dto.Info.GameDuration),
-		DamageSharePercent:        teamDamageSharePercent(player, dto.Info.Participants),
-		VisionScore:               player.VisionScore,
-		VisionPerMinute:           statPerMinute(player.VisionScore, dto.Info.GameDuration),
-		ControlWards:              player.VisionWardsBoughtInGame,
-		ObjectiveDamage:           player.DamageDealtToObjectives,
-		TurretDamage:              player.DamageDealtToTurrets,
 		ItemIconURLs:              make([]string, 7),
 		SummonerSpellIconURLs:     make([]string, 2),
 	}
-	view.PerformanceLabels = derivePerformanceLabels(player, dto.Info.Participants, dto.Info.GameDuration)
 	items := []int{player.Item0, player.Item1, player.Item2, player.Item3, player.Item4, player.Item5, player.Item6}
 	for i, item := range items {
 		if item != 0 {
@@ -1003,7 +1038,7 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 	return view
 }
 
-func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.Time) MatchDetailView {
+func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.Time, firstBloodVictimID int) MatchDetailView {
 	version := majorMinorVersion(dto.Info.GameVersion)
 	if version == "" {
 		version = c.DataDragonVer
@@ -1025,6 +1060,7 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.T
 		TimeAgoLabel:  timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
 	}
 	for _, p := range dto.Info.Participants {
+		p.GaveFirstBlood = firstBloodVictimID > 0 && p.ParticipantID == firstBloodVictimID
 		player := c.playerStatsView(version, p, dto.Info.Participants, dto.Info.GameDuration, me, region, maxDamage)
 		if p.TeamID == team1ID {
 			if len(view.Team1.Players) == 0 {
@@ -1179,8 +1215,14 @@ func derivePerformanceLabels(player participantDTO, participants []participantDT
 	if player.VisionWardsBoughtInGame >= 3 {
 		add("control ward buyer", "good")
 	}
+	if player.VisionWardsBoughtInGame == 0 && role != "Unknown" {
+		add("no control wards", "bad")
+	}
 	if player.FirstBloodKill || player.FirstBloodAssist {
 		add("first blood", "neutral")
+	}
+	if player.GaveFirstBlood {
+		add("gave first blood", "bad")
 	}
 	if player.Challenges.SoloKills != nil && *player.Challenges.SoloKills >= 2 {
 		add("solo killer", "good")
@@ -1224,7 +1266,9 @@ var performanceLabelDescriptions = map[string]string{
 	"visionary":          "Recorded strong vision per minute for the assigned role.",
 	"poor vision":        "Recorded low vision per minute for the assigned role.",
 	"control ward buyer": "Bought at least three control wards.",
+	"no control wards":   "Finished the match without buying a control ward.",
 	"first blood":        "Participated in the match’s first champion kill.",
+	"gave first blood":   "Was the first player killed in the match.",
 	"solo killer":        "Recorded at least two solo kills.",
 	"pentakill":          "Recorded a pentakill.",
 	"quadra kill":        "Recorded a quadra kill.",

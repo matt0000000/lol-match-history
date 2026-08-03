@@ -102,6 +102,8 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 			]`))
 		case strings.HasSuffix(r.URL.Path, "/ids"):
 			w.Write([]byte(`["KR_1"]`))
+		case strings.HasSuffix(r.URL.Path, "/timeline"):
+			w.Write([]byte(timelineFixtureJSON))
 		case strings.HasSuffix(r.URL.Path, "/KR_1"):
 			w.Write([]byte(matchFixtureJSON))
 		default:
@@ -134,8 +136,8 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if m.ChampionName != "Ahri" || m.Kills != 10 || m.Deaths != 2 || m.Assists != 8 {
 		t.Fatalf("player stats = %#v", m)
 	}
-	if m.RoleLabel != "Mid" || !hasPerformanceLabel(m.PerformanceLabels, "lane bully", "good") || !hasPerformanceLabel(m.PerformanceLabels, "damage carry", "good") {
-		t.Fatalf("role/performance = %q/%#v", m.RoleLabel, m.PerformanceLabels)
+	if m.RoleLabel != "Mid" {
+		t.Fatalf("role = %q, want Mid", m.RoleLabel)
 	}
 	if m.CS != 201 || m.Gold != 12345 {
 		t.Fatalf("list economy stats = CS %d, Gold %d", m.CS, m.Gold)
@@ -152,19 +154,13 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if m.KillParticipationPercent == nil || *m.KillParticipationPercent != 100 {
 		t.Fatalf("list KP = %v, want capped 100%%", m.KillParticipationPercent)
 	}
-	if m.DamageSharePercent == nil || *m.DamageSharePercent != 70 || m.VisionScore != 50 || m.ControlWards != 3 || m.ObjectiveDamage != 12000 || m.TurretDamage != 6000 {
-		t.Fatalf("list advanced stats = %#v", m)
-	}
-	if m.GoldPerMinute == nil || math.Abs(*m.GoldPerMinute-383) > 0.1 || m.DamagePerMinute == nil || math.Abs(*m.DamagePerMinute-727.8) > 0.1 || m.VisionPerMinute == nil || math.Abs(*m.VisionPerMinute-1.6) > 0.1 {
-		t.Fatalf("list per-minute stats = gold %v damage %v vision %v", m.GoldPerMinute, m.DamagePerMinute, m.VisionPerMinute)
-	}
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
 	}
 	if _, err := client.MatchDetail(context.Background(), "KR_1", "Hide on bush#KR1", time.Now()); err != nil {
 		t.Fatalf("cached MatchDetail failed: %v", err)
 	}
-	if len(paths) != 5 || !strings.Contains(paths[0], "Hide%20on%20bush/KR1") || !strings.Contains(paths[2], "/lol/league/v4/entries/by-puuid/") || !strings.Contains(paths[3], "start=0&count=10") {
+	if len(paths) != 6 || !strings.Contains(paths[0], "Hide%20on%20bush/KR1") || !strings.Contains(paths[2], "/lol/league/v4/entries/by-puuid/") || !strings.Contains(paths[3], "start=0&count=10") || !strings.HasSuffix(paths[5], "/KR_1/timeline") {
 		t.Fatalf("paths = %#v", paths)
 	}
 }
@@ -365,6 +361,17 @@ func TestDerivePerformanceLabelsTreatsMissingOptionalSignalsAsUnknown(t *testing
 	}
 }
 
+func TestNoControlWardsLabelRequiresKnownSummonersRiftRole(t *testing.T) {
+	knownRole := participantDTO{TeamID: 100, TeamPosition: "UTILITY"}
+	if labels := derivePerformanceLabels(knownRole, []participantDTO{knownRole}, 1800); !hasPerformanceLabel(labels, "no control wards", "bad") {
+		t.Fatalf("known-role labels = %#v, want no control wards", labels)
+	}
+	unknownRole := participantDTO{TeamID: 100}
+	if labels := derivePerformanceLabels(unknownRole, []participantDTO{unknownRole}, 1800); hasPerformanceLabel(labels, "no control wards", "bad") {
+		t.Fatalf("unknown-role labels = %#v, do not label modes without control wards", labels)
+	}
+}
+
 func TestRecentSummaryHandlesMissingOptionalStatsAndTiesDeterministically(t *testing.T) {
 	got := recentSummary([]MatchView{
 		{ChampionName: "Lux", Kills: 1},
@@ -416,6 +423,10 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 			t.Fatalf("X-Riot-Token = %q", r.Header.Get("X-Riot-Token"))
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/timeline") {
+			w.Write([]byte(timelineFixtureJSON))
+			return
+		}
 		w.Write([]byte(matchFixtureJSON))
 	}))
 	defer server.Close()
@@ -425,7 +436,7 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requestURI != "/lol/match/v5/matches/KR_1" {
+	if requestURI != "/lol/match/v5/matches/KR_1/timeline" {
 		t.Fatalf("request URI = %q", requestURI)
 	}
 	if detail.MatchID != "KR_1" || detail.GameModeLabel != "Ranked Solo/Duo" || detail.DurationLabel != "32m 14s" || detail.TimeAgoLabel != "1 hour ago" {
@@ -489,6 +500,12 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	if detail.Team2.Players[0].DamagePercent != 100 {
 		t.Fatalf("highest damage percent = %d", detail.Team2.Players[0].DamagePercent)
 	}
+	if !hasPerformanceLabel(detail.Team2.Players[0].PerformanceLabels, "gave first blood", "bad") {
+		t.Fatalf("first-blood victim labels = %#v", detail.Team2.Players[0].PerformanceLabels)
+	}
+	if !hasPerformanceLabel(detail.Team2.Players[0].PerformanceLabels, "no control wards", "bad") {
+		t.Fatalf("zero-control-ward labels = %#v", detail.Team2.Players[0].PerformanceLabels)
+	}
 	if len(p.ItemIconURLs) != 7 || p.ItemIconURLs[2] != "" || len(p.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", p.ItemIconURLs, p.SummonerSpellIconURLs)
 	}
@@ -499,6 +516,10 @@ func TestMatchDetailCachesRawMatchButRebuildsViewerSpecificView(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/timeline") {
+			w.Write([]byte(timelineFixtureJSON))
+			return
+		}
 		w.Write([]byte(matchFixtureJSON))
 	}))
 	defer server.Close()
@@ -512,8 +533,8 @@ func TestMatchDetailCachesRawMatchButRebuildsViewerSpecificView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requests != 1 {
-		t.Fatalf("Match-V5 requests = %d, want 1", requests)
+	if requests != 2 {
+		t.Fatalf("Match-V5 requests = %d, want match + timeline once", requests)
 	}
 	if first.Team1.Players[0].RiotID != "Hide on bush#KR1" || !first.Team1.Players[0].IsHighlighted {
 		t.Fatalf("first viewer Team1 = %#v", first.Team1)
@@ -546,8 +567,30 @@ func TestFailedMatchDetailIsNotCached(t *testing.T) {
 	if _, err := client.MatchDetail(context.Background(), "KR_1", "", time.Now()); err != nil {
 		t.Fatalf("second MatchDetail failed: %v", err)
 	}
-	if requests != 2 {
-		t.Fatalf("Match-V5 requests = %d, want 2", requests)
+	if requests != 3 {
+		t.Fatalf("Match-V5 requests = %d, want failed match + successful match and timeline", requests)
+	}
+}
+
+func TestMatchDetailStillRendersWhenTimelineIsUnavailable(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if strings.HasSuffix(r.URL.Path, "/timeline") {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(matchFixtureJSON))
+	}))
+	defer server.Close()
+
+	detail, err := newTestRiotClient(server.URL).MatchDetail(context.Background(), "KR_1", "Hide on bush#KR1", time.Now())
+	if err != nil {
+		t.Fatalf("MatchDetail failed because timeline was unavailable: %v", err)
+	}
+	if requests != 2 || len(detail.Team1.Players) == 0 {
+		t.Fatalf("requests/detail = %d/%#v", requests, detail)
 	}
 }
 
@@ -580,7 +623,7 @@ func TestMatchDetailMatchesRiotIDCaseInsensitively(t *testing.T) {
 		{TeamID: 200, Win: true, RiotIDGameName: "Hide on bush", RiotIDTagLine: "KR1"},
 	}
 
-	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "hide on bush#kr1", "kr", time.Now())
+	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "hide on bush#kr1", "kr", time.Now(), 0)
 	if len(detail.Team1.Players) != 1 || detail.Team1.Players[0].RiotID != "Hide on bush#KR1" {
 		t.Fatalf("Team1 = %#v, want searched player's team 200", detail.Team1)
 	}
@@ -595,7 +638,7 @@ func TestMatchDetailDamagePercentIsZeroWhenAllDamageIsZero(t *testing.T) {
 		{TeamID: 100, RiotIDGameName: "One", RiotIDTagLine: "NA1"},
 		{TeamID: 200, RiotIDGameName: "Two", RiotIDTagLine: "NA1"},
 	}
-	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "", "na1", time.Now())
+	detail := newTestRiotClient("https://riot.test").matchDetailView(dto, "", "na1", time.Now(), 0)
 	if detail.Team1.Players[0].DamagePercent != 0 || detail.Team2.Players[0].DamagePercent != 0 {
 		t.Fatalf("zero-damage percents = %d, %d", detail.Team1.Players[0].DamagePercent, detail.Team2.Players[0].DamagePercent)
 	}
@@ -658,7 +701,7 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	data := PageData{
 		Profile: &ProfileView{},
 		Matches: []MatchView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, PerformanceLabels: []PerformanceLabelView{{Text: "strong lane", Tone: "good", Description: performanceLabelDescription("strong lane")}, {Text: "everywhere", Tone: "good", Description: performanceLabelDescription("everywhere")}}},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
 			{},
@@ -681,12 +724,13 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<span class="v">—</span><br><span class="k">cs/min</span>`,
 		`<span class="v">90%</span><br><span class="k">kp</span>`,
 		`<span class="v">—</span><br><span class="k">kp</span>`,
-		`title="Finished 10 minutes 10–19 CS ahead of the lane opponent.">strong lane</span>`,
-		`title="Participated in at least 80% of the team’s champion kills.">everywhere</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index body does not contain %q: %s", want, body)
 		}
+	}
+	if strings.Contains(body, "performance-tag") {
+		t.Fatalf("match history unexpectedly renders performance labels: %s", body)
 	}
 }
 
@@ -717,7 +761,7 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<td class="num-cell">—</td>`,
 		`<span>0</span><small>6.2/min</small>`,
 		`<td class="num-cell">90%</td>`,
-		`<small>35% · 6.2/min</small>`,
+		`<span>24000</span><small>6.2/min</small>`,
 		`<small>6.2/min · 3 cw</small>`,
 		`title="Dealt at least 30% of the team’s champion damage.">damage carry</span>`,
 		`towers <b>9</b>`,
@@ -730,7 +774,7 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 			t.Fatalf("detail body does not contain %q: %s", want, body)
 		}
 	}
-	for _, unwanted := range []string{`<th>cs/min</th>`, `<th>csΔ@10</th>`, `<th>objectives</th>`, `9000 obj`, `4000 turret`} {
+	for _, unwanted := range []string{`<th>cs/min</th>`, `<th>csΔ@10</th>`, `<th>objectives</th>`, `9000 obj`, `4000 turret`, `35%`} {
 		if strings.Contains(body, unwanted) {
 			t.Fatalf("detail body unexpectedly contains %q: %s", unwanted, body)
 		}
@@ -888,13 +932,23 @@ const matchFixtureJSON = `{
     "gameVersion":"16.14.1.123",
     "queueId":420,
     "participants":[
-      {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","teamPosition":"MIDDLE","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"damageDealtToObjectives":12000,"damageDealtToTurrets":6000,"visionScore":50,"visionWardsBoughtInGame":3,"turretTakedowns":3,"firstBloodKill":true,"tripleKills":1,"challenges":{"laneMinionsFirst10Minutes":73,"soloKills":2},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
-      {"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","teamPosition":"JUNGLE","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
-      {"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","teamPosition":"MIDDLE","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"challenges":{"laneMinionsFirst10Minutes":0},"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
+      {"participantId":1,"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","teamPosition":"MIDDLE","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"damageDealtToObjectives":12000,"damageDealtToTurrets":6000,"visionScore":50,"visionWardsBoughtInGame":3,"turretTakedowns":3,"firstBloodKill":true,"tripleKills":1,"challenges":{"laneMinionsFirst10Minutes":73,"soloKills":2},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
+      {"participantId":2,"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","teamPosition":"JUNGLE","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
+      {"participantId":3,"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","teamPosition":"MIDDLE","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"challenges":{"laneMinionsFirst10Minutes":0},"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
     ],
     "teams":[
       {"teamId":100,"objectives":{"tower":{"kills":9},"dragon":{"kills":3},"baron":{"kills":1},"riftHerald":{"kills":1},"horde":{"kills":4}}},
       {"teamId":200,"objectives":{"tower":{"kills":2},"dragon":{"kills":1},"baron":{"kills":0},"riftHerald":{"kills":0},"horde":{"kills":0}}}
     ]
   }
+}`
+
+const timelineFixtureJSON = `{
+  "info":{"frames":[
+    {"events":[]},
+    {"events":[
+      {"type":"CHAMPION_KILL","timestamp":125000,"victimId":3},
+      {"type":"CHAMPION_KILL","timestamp":250000,"victimId":1}
+    ]}
+  ]}
 }`
