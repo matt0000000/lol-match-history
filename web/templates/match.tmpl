@@ -105,16 +105,17 @@
 {{define "copyScript"}}
 <script>
 function copyMatchLink(button) {
+  var matchURL = window.location.origin + window.location.pathname;
   function done() {
     button.textContent = '[ copied ]';
     window.setTimeout(function () { button.textContent = '[ copy link ]'; }, 1500);
   }
   if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(window.location.href).then(done);
+    navigator.clipboard.writeText(matchURL).then(done);
     return;
   }
   var input = document.createElement('textarea');
-  input.value = window.location.href;
+  input.value = matchURL;
   input.setAttribute('readonly', '');
   input.style.position = 'fixed';
   input.style.opacity = '0';

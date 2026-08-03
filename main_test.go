@@ -656,10 +656,13 @@ func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"match-history", "back to match-history", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`, "[ copy link ]", "navigator.clipboard"} {
+	for _, want := range []string{"match-history", "back to match-history", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`, "[ copy link ]", "navigator.clipboard", "window.location.origin + window.location.pathname", "writeText(matchURL)"} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
 		}
+	}
+	if strings.Contains(rr.Body.String(), "writeText(window.location.href)") {
+		t.Fatalf("copy script still copies the viewer-specific query string: %s", rr.Body.String())
 	}
 }
 
