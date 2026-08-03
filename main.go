@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -111,6 +112,26 @@ type RecentSummaryView struct {
 	AverageCSDeltaFirst10   *float64
 	MostPlayedChampion      string
 	MostPlayedChampionGames int
+	Champions               []ChampionSummaryView
+	Roles                   []RoleSummaryView
+}
+
+type ChampionSummaryView struct {
+	ChampionName          string
+	ChampionIconURL       string
+	Games                 int
+	Wins                  int
+	WinRatePercent        int
+	AverageKDA            float64
+	AverageCSPerMinute    *float64
+	AverageCSDeltaFirst10 *float64
+}
+
+type RoleSummaryView struct {
+	Role           string
+	Games          int
+	Wins           int
+	WinRatePercent int
 }
 
 type ProfileView struct {
@@ -139,6 +160,9 @@ type MatchView struct {
 	TimeAgoLabel              string
 	ChampionName              string
 	ChampionIconURL           string
+	RoleLabel                 string
+	PerformanceLabel          string
+	PerformanceTone           string
 	Kills                     int
 	Deaths                    int
 	Assists                   int
@@ -170,7 +194,16 @@ type TeamView struct {
 	TotalDeaths  int
 	TotalAssists int
 	TotalGold    int
+	Objectives   ObjectiveView
 	Players      []PlayerStatsView
+}
+
+type ObjectiveView struct {
+	Towers  int
+	Dragons int
+	Barons  int
+	Heralds int
+	Grubs   int
 }
 
 type PlayerStatsView struct {
@@ -380,8 +413,8 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 	}
 
 	summary := &RecentSummaryView{Games: len(matches)}
-	championGames := make(map[string]int)
-	championFirstSeen := make(map[string]int)
+	champions := make(map[string]*championSummaryAggregate)
+	roles := make(map[string]*roleSummaryAggregate)
 	var kills, deaths, assists int
 	var csPerMinuteTotal, csDeltaTotal float64
 	var csPerMinuteGames, csDeltaGames int
@@ -402,10 +435,37 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 			csDeltaGames++
 		}
 		if match.ChampionName != "" {
-			if _, ok := championFirstSeen[match.ChampionName]; !ok {
-				championFirstSeen[match.ChampionName] = i
+			agg := champions[match.ChampionName]
+			if agg == nil {
+				agg = &championSummaryAggregate{ChampionName: match.ChampionName, ChampionIconURL: match.ChampionIconURL, FirstSeen: i}
+				champions[match.ChampionName] = agg
 			}
-			championGames[match.ChampionName]++
+			agg.Games++
+			if match.Win {
+				agg.Wins++
+			}
+			agg.Kills += match.Kills
+			agg.Deaths += match.Deaths
+			agg.Assists += match.Assists
+			if match.CSPerMinute != nil {
+				agg.CSPerMinuteTotal += *match.CSPerMinute
+				agg.CSPerMinuteGames++
+			}
+			if match.CSDeltaFirst10Minutes != nil {
+				agg.CSDeltaTotal += float64(*match.CSDeltaFirst10Minutes)
+				agg.CSDeltaGames++
+			}
+		}
+		if match.RoleLabel != "" && match.RoleLabel != "Unknown" {
+			agg := roles[match.RoleLabel]
+			if agg == nil {
+				agg = &roleSummaryAggregate{Role: match.RoleLabel, FirstSeen: i}
+				roles[match.RoleLabel] = agg
+			}
+			agg.Games++
+			if match.Win {
+				agg.Wins++
+			}
 		}
 	}
 
@@ -420,14 +480,81 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 		average := csDeltaTotal / float64(csDeltaGames)
 		summary.AverageCSDeltaFirst10 = &average
 	}
-	for champion, games := range championGames {
-		if games > summary.MostPlayedChampionGames ||
-			(games == summary.MostPlayedChampionGames && championFirstSeen[champion] < championFirstSeen[summary.MostPlayedChampion]) {
-			summary.MostPlayedChampion = champion
-			summary.MostPlayedChampionGames = games
-		}
+	summary.Champions = championSummaryViews(champions)
+	if len(summary.Champions) > 0 {
+		summary.MostPlayedChampion = summary.Champions[0].ChampionName
+		summary.MostPlayedChampionGames = summary.Champions[0].Games
 	}
+	summary.Roles = roleSummaryViews(roles)
 	return summary
+}
+
+type championSummaryAggregate struct {
+	ChampionName, ChampionIconURL                  string
+	Games, Wins, Kills, Deaths, Assists, FirstSeen int
+	CSPerMinuteTotal, CSDeltaTotal                 float64
+	CSPerMinuteGames, CSDeltaGames                 int
+}
+
+func championSummaryViews(aggregates map[string]*championSummaryAggregate) []ChampionSummaryView {
+	ordered := make([]*championSummaryAggregate, 0, len(aggregates))
+	for _, aggregate := range aggregates {
+		ordered = append(ordered, aggregate)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Games != ordered[j].Games {
+			return ordered[i].Games > ordered[j].Games
+		}
+		return ordered[i].FirstSeen < ordered[j].FirstSeen
+	})
+	if len(ordered) > 3 {
+		ordered = ordered[:3]
+	}
+	views := make([]ChampionSummaryView, 0, len(ordered))
+	for _, aggregate := range ordered {
+		view := ChampionSummaryView{
+			ChampionName: aggregate.ChampionName, ChampionIconURL: aggregate.ChampionIconURL,
+			Games: aggregate.Games, Wins: aggregate.Wins,
+			WinRatePercent: int(math.Round(float64(aggregate.Wins) * 100 / float64(aggregate.Games))),
+			AverageKDA:     float64(aggregate.Kills+aggregate.Assists) / float64(max(aggregate.Deaths, 1)),
+		}
+		if aggregate.CSPerMinuteGames > 0 {
+			average := aggregate.CSPerMinuteTotal / float64(aggregate.CSPerMinuteGames)
+			view.AverageCSPerMinute = &average
+		}
+		if aggregate.CSDeltaGames > 0 {
+			average := aggregate.CSDeltaTotal / float64(aggregate.CSDeltaGames)
+			view.AverageCSDeltaFirst10 = &average
+		}
+		views = append(views, view)
+	}
+	return views
+}
+
+type roleSummaryAggregate struct {
+	Role                   string
+	Games, Wins, FirstSeen int
+}
+
+func roleSummaryViews(aggregates map[string]*roleSummaryAggregate) []RoleSummaryView {
+	ordered := make([]*roleSummaryAggregate, 0, len(aggregates))
+	for _, aggregate := range aggregates {
+		ordered = append(ordered, aggregate)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Games != ordered[j].Games {
+			return ordered[i].Games > ordered[j].Games
+		}
+		return ordered[i].FirstSeen < ordered[j].FirstSeen
+	})
+	views := make([]RoleSummaryView, 0, len(ordered))
+	for _, aggregate := range ordered {
+		views = append(views, RoleSummaryView{
+			Role: aggregate.Role, Games: aggregate.Games, Wins: aggregate.Wins,
+			WinRatePercent: int(math.Round(float64(aggregate.Wins) * 100 / float64(aggregate.Games))),
+		})
+	}
+	return views
 }
 
 type RiotClient struct {
@@ -475,7 +602,23 @@ type matchDTO struct {
 		GameVersion  string           `json:"gameVersion"`
 		QueueID      int              `json:"queueId"`
 		Participants []participantDTO `json:"participants"`
+		Teams        []teamDTO        `json:"teams"`
 	} `json:"info"`
+}
+
+type teamDTO struct {
+	TeamID     int `json:"teamId"`
+	Objectives struct {
+		Tower      objectiveDTO `json:"tower"`
+		Dragon     objectiveDTO `json:"dragon"`
+		Baron      objectiveDTO `json:"baron"`
+		RiftHerald objectiveDTO `json:"riftHerald"`
+		Horde      objectiveDTO `json:"horde"`
+	} `json:"objectives"`
+}
+
+type objectiveDTO struct {
+	Kills int `json:"kills"`
 }
 
 type participantDTO struct {
@@ -792,6 +935,7 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		TimeAgoLabel:              timeAgoLabel(time.UnixMilli(dto.Info.GameCreation), now),
 		ChampionName:              player.ChampionName,
 		ChampionIconURL:           c.championURL(version, player.ChampionName),
+		RoleLabel:                 roleLabel(player.TeamPosition),
 		Kills:                     player.Kills,
 		Deaths:                    player.Deaths,
 		Assists:                   player.Assists,
@@ -804,6 +948,7 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		ItemIconURLs:              make([]string, 7),
 		SummonerSpellIconURLs:     make([]string, 2),
 	}
+	view.PerformanceLabel, view.PerformanceTone = performanceIndicator(view)
 	items := []int{player.Item0, player.Item1, player.Item2, player.Item3, player.Item4, player.Item5, player.Item6}
 	for i, item := range items {
 		if item != 0 {
@@ -858,7 +1003,59 @@ func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.T
 			view.Team2.Players = append(view.Team2.Players, player)
 		}
 	}
+	for _, team := range dto.Info.Teams {
+		objectives := ObjectiveView{
+			Towers: team.Objectives.Tower.Kills, Dragons: team.Objectives.Dragon.Kills,
+			Barons: team.Objectives.Baron.Kills, Heralds: team.Objectives.RiftHerald.Kills,
+			Grubs: team.Objectives.Horde.Kills,
+		}
+		if team.TeamID == team1ID {
+			view.Team1.Objectives = objectives
+		} else {
+			view.Team2.Objectives = objectives
+		}
+	}
 	return view
+}
+
+func roleLabel(position string) string {
+	switch strings.ToUpper(strings.TrimSpace(position)) {
+	case "TOP":
+		return "Top"
+	case "JUNGLE":
+		return "Jungle"
+	case "MIDDLE":
+		return "Mid"
+	case "BOTTOM":
+		return "AD Carry"
+	case "UTILITY":
+		return "Support"
+	default:
+		return "Unknown"
+	}
+}
+
+func performanceIndicator(match MatchView) (string, string) {
+	if match.CSDeltaFirst10Minutes != nil {
+		if *match.CSDeltaFirst10Minutes >= 10 {
+			return "strong lane", "good"
+		}
+		if *match.CSDeltaFirst10Minutes <= -10 {
+			return "weak lane", "bad"
+		}
+	}
+	if match.KillParticipationPercent != nil {
+		if *match.KillParticipationPercent >= 70 {
+			return "high participation", "good"
+		}
+		if *match.KillParticipationPercent <= 35 {
+			return "low participation", "bad"
+		}
+	}
+	if match.CSPerMinute != nil && *match.CSPerMinute >= 7 {
+		return "good farming", "good"
+	}
+	return "", ""
 }
 
 func (c *RiotClient) playerStatsView(version string, p participantDTO, participants []participantDTO, duration int, me, region string, maxDamage int) PlayerStatsView {

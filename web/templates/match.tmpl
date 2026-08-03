@@ -13,6 +13,7 @@
 <main class="match-main">
 {{template "matchContent" .}}
 </main>
+{{template "copyScript" .}}
 </body>
 </html>
 {{end}}
@@ -27,6 +28,7 @@
   <span class="mode">{{.GameModeLabel}}</span>
   <span class="muted">{{.DurationLabel}}</span>
   <span class="muted">{{.TimeAgoLabel}}</span>
+  <button type="button" class="btn muted copy-link" onclick="copyMatchLink(this)">[ copy link ]</button>
 </div>
 
 {{template "teamGroup" .Team1}}
@@ -40,6 +42,13 @@
   <div class="team-head {{if .Win}}win{{else}}loss{{end}}">
     <span>team totals</span>
     <span class="totals">{{.TotalKills}}/{{.TotalDeaths}}/{{.TotalAssists}} &middot; {{.TotalGold}}g</span>
+  </div>
+  <div class="objective-strip">
+    <span>towers <b>{{.Objectives.Towers}}</b></span>
+    <span>dragons <b>{{.Objectives.Dragons}}</b></span>
+    <span>barons <b>{{.Objectives.Barons}}</b></span>
+    <span>heralds <b>{{.Objectives.Heralds}}</b></span>
+    <span>grubs <b>{{.Objectives.Grubs}}</b></span>
   </div>
   <table class="scoretable">
     <colgroup>
@@ -90,4 +99,28 @@
     </tbody>
   </table>
 </div>
+{{end}}
+
+{{define "copyScript"}}
+<script>
+function copyMatchLink(button) {
+  function done() {
+    button.textContent = '[ copied ]';
+    window.setTimeout(function () { button.textContent = '[ copy link ]'; }, 1500);
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(window.location.href).then(done);
+    return;
+  }
+  var input = document.createElement('textarea');
+  input.value = window.location.href;
+  input.setAttribute('readonly', '');
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.appendChild(input);
+  input.select();
+  if (document.execCommand('copy')) done();
+  document.body.removeChild(input);
+}
+</script>
 {{end}}

@@ -134,6 +134,9 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if m.ChampionName != "Ahri" || m.Kills != 10 || m.Deaths != 2 || m.Assists != 8 {
 		t.Fatalf("player stats = %#v", m)
 	}
+	if m.RoleLabel != "Mid" || m.PerformanceLabel != "strong lane" || m.PerformanceTone != "good" {
+		t.Fatalf("role/performance = %q/%q/%q", m.RoleLabel, m.PerformanceLabel, m.PerformanceTone)
+	}
 	if m.CS != 201 || m.Gold != 12345 {
 		t.Fatalf("list economy stats = CS %d, Gold %d", m.CS, m.Gold)
 	}
@@ -271,9 +274,9 @@ func TestRecentSummaryUsesAvailableLastTwentyMatchStats(t *testing.T) {
 	csSix, csEight := 6.0, 8.0
 	deltaTen, deltaNegativeFour := 10, -4
 	matches := []MatchView{
-		{Win: true, ChampionName: "Ahri", Kills: 10, Deaths: 2, Assists: 8, CSPerMinute: &csSix, CSDeltaFirst10Minutes: &deltaTen},
-		{Win: false, ChampionName: "Lux", Kills: 2, Deaths: 4, Assists: 6, CSPerMinute: &csEight},
-		{Win: true, ChampionName: "Ahri", Kills: 6, Deaths: 0, Assists: 4, CSDeltaFirst10Minutes: &deltaNegativeFour},
+		{Win: true, ChampionName: "Ahri", ChampionIconURL: "ahri.png", RoleLabel: "Mid", Kills: 10, Deaths: 2, Assists: 8, CSPerMinute: &csSix, CSDeltaFirst10Minutes: &deltaTen},
+		{Win: false, ChampionName: "Lux", RoleLabel: "Support", Kills: 2, Deaths: 4, Assists: 6, CSPerMinute: &csEight},
+		{Win: true, ChampionName: "Ahri", RoleLabel: "Mid", Kills: 6, Deaths: 0, Assists: 4, CSDeltaFirst10Minutes: &deltaNegativeFour},
 	}
 
 	got := recentSummary(matches)
@@ -294,6 +297,38 @@ func TestRecentSummaryUsesAvailableLastTwentyMatchStats(t *testing.T) {
 	}
 	if got.MostPlayedChampion != "Ahri" || got.MostPlayedChampionGames != 2 {
 		t.Fatalf("most played = %q/%d, want Ahri/2", got.MostPlayedChampion, got.MostPlayedChampionGames)
+	}
+	if len(got.Champions) != 2 || got.Champions[0].ChampionName != "Ahri" || got.Champions[0].Games != 2 || got.Champions[0].WinRatePercent != 100 || got.Champions[0].ChampionIconURL != "ahri.png" {
+		t.Fatalf("champion summaries = %#v", got.Champions)
+	}
+	if len(got.Roles) != 2 || got.Roles[0].Role != "Mid" || got.Roles[0].Games != 2 || got.Roles[0].WinRatePercent != 100 {
+		t.Fatalf("role summaries = %#v", got.Roles)
+	}
+}
+
+func TestPerformanceIndicatorUsesStablePriorityAndThresholds(t *testing.T) {
+	positiveTen, negativeTen, positiveNine := 10, -10, 9
+	seventy, thirtyFive := 70, 35
+	seven := 7.0
+	for _, tc := range []struct {
+		name      string
+		match     MatchView
+		wantLabel string
+		wantTone  string
+	}{
+		{"strong lane takes priority", MatchView{CSDeltaFirst10Minutes: &positiveTen, KillParticipationPercent: &thirtyFive}, "strong lane", "good"},
+		{"weak lane", MatchView{CSDeltaFirst10Minutes: &negativeTen}, "weak lane", "bad"},
+		{"high participation", MatchView{CSDeltaFirst10Minutes: &positiveNine, KillParticipationPercent: &seventy}, "high participation", "good"},
+		{"low participation", MatchView{KillParticipationPercent: &thirtyFive}, "low participation", "bad"},
+		{"good farming", MatchView{CSPerMinute: &seven}, "good farming", "good"},
+		{"no signal", MatchView{}, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			label, tone := performanceIndicator(tc.match)
+			if label != tc.wantLabel || tone != tc.wantTone {
+				t.Fatalf("performanceIndicator() = %q/%q, want %q/%q", label, tone, tc.wantLabel, tc.wantTone)
+			}
+		})
 	}
 }
 
@@ -325,13 +360,15 @@ func TestEmbeddedIndexTemplateRendersRecentSummary(t *testing.T) {
 			Games: 20, Wins: 12, Losses: 8, WinRatePercent: 60,
 			AverageKDA: 3.45, AverageCSPerMinute: &cs, AverageCSDeltaFirst10: &delta,
 			MostPlayedChampion: "Ahri", MostPlayedChampionGames: 6,
+			Champions: []ChampionSummaryView{{ChampionName: "Ahri", Games: 6, WinRatePercent: 67, AverageKDA: 4.2, AverageCSPerMinute: &cs, AverageCSDeltaFirst10: &delta}},
+			Roles:     []RoleSummaryView{{Role: "Mid", Games: 15, WinRatePercent: 60}},
 		},
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "content", data); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"last 20 matches", "12w 8l", "60%", "3.45", "7.2", "&#43;3.0", "Ahri", "most played · 6 games"} {
+	for _, want := range []string{"last 20 matches", "12w 8l", "60%", "3.45", "7.2", "&#43;3.0", "Ahri", "most played · 6 games", "recent champions", "6 games · 67% wr", "recent roles", "15 games"} {
 		if !strings.Contains(buf.String(), want) {
 			t.Fatalf("summary does not contain %q: %s", want, buf.String())
 		}
@@ -369,6 +406,9 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 	}
 	if detail.Team2.TotalKills != 5 || detail.Team2.TotalDeaths != 5 || detail.Team2.TotalAssists != 2 || detail.Team2.TotalGold != 11000 {
 		t.Fatalf("team 2 totals = %#v", detail.Team2)
+	}
+	if detail.Team1.Objectives != (ObjectiveView{Towers: 9, Dragons: 3, Barons: 1, Heralds: 1, Grubs: 4}) || detail.Team2.Objectives != (ObjectiveView{Towers: 2, Dragons: 1}) {
+		t.Fatalf("objectives = %#v / %#v", detail.Team1.Objectives, detail.Team2.Objectives)
 	}
 	p := detail.Team1.Players[0]
 	if p.RiotID != "Hide on bush#KR1" || p.Region != "kr" || p.ChampionName != "Ahri" || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || p.DamagePercent != 59 || !p.IsHighlighted {
@@ -432,6 +472,9 @@ func TestMatchDetailCachesRawMatchButRebuildsViewerSpecificView(t *testing.T) {
 	}
 	if second.Team1.Players[0].RiotID != "Enemy#KR1" || !second.Team1.Players[0].IsHighlighted {
 		t.Fatalf("second viewer Team1 = %#v", second.Team1)
+	}
+	if second.Team1.Objectives.Towers != 2 || second.Team2.Objectives.Towers != 9 {
+		t.Fatalf("viewer-relative objectives = %#v / %#v", second.Team1.Objectives, second.Team2.Objectives)
 	}
 }
 
@@ -535,7 +578,7 @@ func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"match-history", "back to match-history", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`} {
+	for _, want := range []string{"match-history", "back to match-history", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`, "[ copy link ]", "navigator.clipboard"} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
 		}
@@ -567,7 +610,7 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	data := PageData{
 		Profile: &ProfileView{},
 		Matches: []MatchView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety},
+			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, PerformanceLabel: "strong lane", PerformanceTone: "good"},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
 			{},
@@ -590,6 +633,7 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<span class="v">—</span><br><span class="k">cs/min</span>`,
 		`<span class="v">90%</span><br><span class="k">kp</span>`,
 		`<span class="v">—</span><br><span class="k">kp</span>`,
+		`<span class="performance-tag good">strong lane</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index body does not contain %q: %s", want, body)
@@ -603,7 +647,7 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	sixPointTwo := 6.2
 	data := MatchDetailView{
 		GameModeLabel: "Ranked Solo/Duo",
-		Team1: TeamView{Win: true, Players: []PlayerStatsView{
+		Team1: TeamView{Win: true, Objectives: ObjectiveView{Towers: 9, Dragons: 3, Barons: 1, Heralds: 1, Grubs: 4}, Players: []PlayerStatsView{
 			{LaneMinionsFirst10Minutes: &seventyThree, CSDeltaFirst10Minutes: &twelve, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety},
 			{LaneMinionsFirst10Minutes: &zero, CSDeltaFirst10Minutes: &negativeEight},
 			{CSDeltaFirst10Minutes: &zero},
@@ -627,6 +671,11 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<td class="num-cell">—</td>`,
 		`<td class="num-cell">6.2</td>`,
 		`<td class="num-cell">90%</td>`,
+		`towers <b>9</b>`,
+		`dragons <b>3</b>`,
+		`barons <b>1</b>`,
+		`heralds <b>1</b>`,
+		`grubs <b>4</b>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("detail body does not contain %q: %s", want, body)
@@ -788,6 +837,10 @@ const matchFixtureJSON = `{
       {"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","teamPosition":"MIDDLE","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"challenges":{"laneMinionsFirst10Minutes":73},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
       {"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","teamPosition":"JUNGLE","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
       {"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","teamPosition":"MIDDLE","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"challenges":{"laneMinionsFirst10Minutes":0},"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
+    ],
+    "teams":[
+      {"teamId":100,"objectives":{"tower":{"kills":9},"dragon":{"kills":3},"baron":{"kills":1},"riftHerald":{"kills":1},"horde":{"kills":4}}},
+      {"teamId":200,"objectives":{"tower":{"kills":2},"dragon":{"kills":1},"baron":{"kills":0},"riftHerald":{"kills":0},"horde":{"kills":0}}}
     ]
   }
 }`

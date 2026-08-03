@@ -183,6 +183,27 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .rank-row .rank-detail b { color: var(--ink); }
 .rank-row .rank-detail { color: var(--muted); }
 
+/* Recent champion and role summaries */
+
+.summary-list .panel-row { cursor: default; }
+.champion-summary-row { gap: 12px; }
+.champion-summary-row .champ-icon-img { width: 32px; height: 32px; }
+.summary-name { min-width: 120px; flex: 1; }
+.summary-name b,
+.summary-name span,
+.mini-stat b,
+.mini-stat span { display: block; }
+.summary-name span,
+.mini-stat span { color: var(--muted); font-size: 10px; }
+.mini-stat { width: 78px; flex: 0 0 auto; text-align: right; }
+
+.role-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.role-stat { padding: 10px 14px; border-right: 1px solid var(--border); min-width: 0; }
+.role-stat:last-child { border-right: none; }
+.role-stat b,
+.role-stat span { display: block; }
+.role-stat span { color: var(--muted); font-size: 10px; }
+
 /* Match list */
 
 .tag-badge {
@@ -194,6 +215,9 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 
 .match-row { gap: 14px; flex-wrap: wrap; }
 .result-block { width: 130px; flex-shrink: 0; color: var(--muted); font-size: 12px; }
+.performance-tag { display: inline-block; margin-top: 3px; padding: 0 4px; border: 1px solid var(--border); font-size: 10px; }
+.performance-tag.good { color: var(--win); border-color: var(--win); }
+.performance-tag.bad { color: var(--loss); border-color: var(--loss); }
 
 .champ-block { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .champ-icon-img { width: 34px; height: 34px; border: 1px solid var(--border); }
@@ -241,6 +265,13 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
   .rank-row { align-items: flex-start; padding: 10px 12px; }
   .rank-row .rank-queue { width: 82px; }
   .rank-row .rank-detail { min-width: 0; overflow-wrap: anywhere; }
+  .champion-summary-row { display: grid; grid-template-columns: auto minmax(0, 1fr) repeat(3, auto); padding: 10px; gap: 8px; }
+  .summary-name { min-width: 0; }
+  .mini-stat { width: auto; min-width: 42px; }
+  .role-summary { grid-template-columns: repeat(2, 1fr); }
+  .role-stat { border-bottom: 1px solid var(--border); }
+  .role-stat:nth-child(2n) { border-right: none; }
+  .role-stat:last-child { border-bottom: none; }
 }
 
 /* Match detail page */
@@ -252,6 +283,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .detail-meta { display: flex; gap: 12px; margin-bottom: 16px; font-size: 13px; flex-wrap: wrap; }
 .detail-meta .mode { color: var(--ink); font-weight: bold; }
 .detail-meta .muted { color: var(--muted); }
+.copy-link { margin-left: auto; padding: 3px 9px; font-size: 11px; }
 
 .team-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -260,6 +292,12 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .team-head .totals { font-weight: normal; color: var(--muted); }
 .team-head.win { color: var(--win); }
 .team-head.loss { color: var(--loss); }
+
+.objective-strip {
+  display: flex; gap: 18px; padding: 6px 16px; border-bottom: 1px solid var(--border);
+  color: var(--muted); font-size: 10px; white-space: nowrap;
+}
+.objective-strip b { color: var(--ink); }
 
 .scoreboard-panel { overflow-x: auto; overscroll-behavior-x: contain; }
 .scoretable { width: 100%; min-width: 1106px; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
@@ -307,6 +345,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
   .back-link { margin-bottom: 12px; }
   .detail-meta { gap: 6px 10px; margin-bottom: 12px; }
   .team-head { position: sticky; left: 0; padding: 8px 12px; }
+  .objective-strip { position: sticky; left: 0; gap: 12px; padding: 6px 12px; }
   .team-head .totals { white-space: nowrap; }
   .scoreboard-panel {
     -webkit-overflow-scrolling: touch;

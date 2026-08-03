@@ -49,12 +49,36 @@
   </div>
 </div>
 
+{{with .RecentSummary}}{{with .Champions}}
+<div class="section-label">recent champions<span class="rule"></span></div>
+<div class="panel summary-list">
+  {{range .}}
+  <div class="panel-row champion-summary-row">
+    <img class="champ-icon-img" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
+    <div class="summary-name"><b>{{.ChampionName}}</b><span>{{.Games}} games · {{.WinRatePercent}}% wr</span></div>
+    <div class="mini-stat"><b>{{printf "%.2f" .AverageKDA}}</b><span>kda</span></div>
+    <div class="mini-stat"><b>{{formatDecimal .AverageCSPerMinute}}</b><span>cs/min</span></div>
+    <div class="mini-stat"><b>{{formatDecimalDelta .AverageCSDeltaFirst10}}</b><span>csΔ@10</span></div>
+  </div>
+  {{end}}
+</div>
+{{end}}{{end}}
+
+{{with .RecentSummary}}{{with .Roles}}
+<div class="section-label">recent roles<span class="rule"></span></div>
+<div class="panel role-summary">
+  {{range .}}
+  <div class="role-stat"><b>{{.Role}}</b><span>{{.Games}} games</span><span>{{.WinRatePercent}}% wr</span></div>
+  {{end}}
+</div>
+{{end}}{{end}}
+
 <div class="section-label">recent matches<span class="rule"></span></div>
 <div class="panel">
 {{range .Matches}}
   <a class="panel-row match-row {{if .Win}}win{{else}}loss{{end}}" href="/match/{{.MatchID}}?me={{$.Query}}">
     <span class="tag-badge">{{if .Win}}WIN{{else}}LOSS{{end}}</span>
-    <div class="result-block">{{.GameModeLabel}}<br>{{.TimeAgoLabel}}</div>
+    <div class="result-block">{{.GameModeLabel}}<br>{{.TimeAgoLabel}}{{if .PerformanceLabel}}<br><span class="performance-tag {{.PerformanceTone}}">{{.PerformanceLabel}}</span>{{end}}</div>
 
     <div class="champ-block">
       <img class="champ-icon-img" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
