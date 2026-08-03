@@ -227,8 +227,8 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .spell-icon-img { width: 14px; height: 14px; border: 1px solid var(--border); }
 
 .items-row { display: flex; gap: 2px; flex-shrink: 0; }
-.item-slot-img { width: 18px; height: 18px; border: 1px solid var(--border); }
-.item-slot.empty { display: inline-block; width: 18px; height: 18px; border: 1px dashed var(--border); }
+.item-slot-img { width: 22px; height: 22px; border: 1px solid var(--border); }
+.item-slot.empty { display: inline-block; width: 22px; height: 22px; border: 1px dashed var(--border); }
 
 .stat-cluster { display: flex; gap: 14px; margin-left: auto; font-size: 13px; }
 .stat { width: 64px; text-align: right; flex: 0 0 auto; }
@@ -246,7 +246,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
   .champ-icon-img { width: 28px; height: 28px; }
   .items-row { grid-column: 1 / -1; }
   .item-slot-img,
-  .item-slot.empty { width: 20px; height: 20px; }
+  .item-slot.empty { width: 22px; height: 22px; }
   .stat-cluster {
     grid-column: 1 / -1;
     display: grid;
@@ -301,7 +301,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .objective-strip b { color: var(--ink); }
 
 .scoreboard-panel { overflow-x: auto; overscroll-behavior-x: contain; }
-.scoretable { width: 100%; min-width: 1082px; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
+.scoretable { width: 100%; min-width: 1108px; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
 .scoretable .player-col { width: 300px; }
 .scoretable th {
   text-align: left; font-size: 11px; color: var(--muted); font-weight: normal;
@@ -318,8 +318,8 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .player-identity { min-width: 0; flex: 1; }
 .player-identity .performance-labels { margin-top: 3px; }
 .player-identity .performance-tag { font-size: 8px; line-height: 1.4; }
-.player-inner .champ-icon-img { width: 26px; height: 26px; flex-shrink: 0; }
-.player-inner .spell-icon-img { width: 11px; height: 11px; }
+.player-inner .champ-icon-img { width: 32px; height: 32px; flex-shrink: 0; }
+.player-inner .spell-icon-img { width: 14px; height: 14px; }
 
 .riot-id {
   display: inline-block;
@@ -346,7 +346,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 
 .items-inner { display: flex; gap: 2px; }
 .items-inner .item-slot-img,
-.items-inner .item-slot.empty { width: 17px; height: 17px; }
+.items-inner .item-slot.empty { width: 20px; height: 20px; }
 
 @media (max-width: 680px) {
   .back-link { margin-bottom: 12px; }
@@ -357,7 +357,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
   .scoreboard-panel {
     -webkit-overflow-scrolling: touch;
   }
-  .scoretable { min-width: 1082px; font-size: 11px; }
+  .scoretable { min-width: 1108px; font-size: 11px; }
   .scoretable .player-col { width: 190px; }
   .scoretable th,
   .scoretable td { padding: 7px 10px; }
