@@ -350,25 +350,64 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 @media (max-width: 680px) {
   .back-link { margin-bottom: 12px; }
   .detail-meta { gap: 6px 10px; margin-bottom: 12px; }
-  .team-head { position: sticky; left: 0; padding: 8px 12px; }
-  .objective-strip { position: sticky; left: 0; gap: 12px; padding: 6px 12px; }
+  .copy-link { width: 100%; margin-left: 0; min-height: 36px; }
+  .team-head { padding: 8px 12px; }
+  .objective-strip { flex-wrap: wrap; gap: 4px 14px; padding: 7px 12px; white-space: normal; }
   .team-head .totals { white-space: nowrap; }
-  .scoreboard-panel {
-    -webkit-overflow-scrolling: touch;
+  .scoreboard-panel { overflow-x: visible; }
+  .scoretable { display: block; width: 100%; min-width: 0; font-size: 11px; }
+  .scoretable colgroup,
+  .scoretable thead { display: none; }
+  .scoretable tbody { display: block; }
+  .scoretable tr {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    border-bottom: 1px solid var(--border);
   }
-  .scoretable { min-width: 1162px; font-size: 11px; }
-  .scoretable .player-col { width: 190px; }
-  .scoretable th,
-  .scoretable td { padding: 7px 10px; }
-  .scoretable th:first-child,
-  .scoretable td:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    width: 190px;
-    background: var(--bg);
-    box-shadow: 1px 0 0 var(--border);
+  .scoretable tr:last-child { border-bottom: none; }
+  .scoretable td,
+  .scoretable tr:last-child td {
+    display: block;
+    min-width: 0;
+    padding: 7px 8px;
+    border: none;
+    overflow: visible;
   }
-  .scoretable thead th:first-child { z-index: 2; }
-  .scoretable tr.me td:first-child { background: var(--panel); }
+  .scoretable td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 8px;
+    line-height: 1.2;
+    text-transform: lowercase;
+  }
+  .scoretable .player-cell {
+    grid-column: 1 / -1;
+    padding: 10px 8px 8px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .scoretable .dmg-cell { grid-column: span 2; }
+  .scoretable .items-cell {
+    grid-column: 1 / -1;
+    padding-top: 4px;
+    padding-bottom: 10px;
+  }
+  .scoretable tr.me td { background: var(--panel); }
+  .player-inner { align-items: flex-start; }
+  .riot-id {
+    display: block;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .player-identity .performance-labels { gap: 3px; }
+  .player-identity .performance-tag { white-space: normal; }
+  .dmg-cell { min-width: 0; }
+  .dmg-inner { gap: 6px; }
+  .dmg-bar-track { width: auto; min-width: 24px; flex: 1; }
+  .items-inner { flex-wrap: wrap; }
 }
