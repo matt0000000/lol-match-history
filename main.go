@@ -51,9 +51,10 @@ func hashEmbeddedFile(name string) string {
 // Tests use it too, so they exercise the same template set the server does.
 func parseTemplates() (*template.Template, error) {
 	return template.New("").Funcs(template.FuncMap{
-		"styleURL":      func() string { return "/static/style.css?v=" + styleVersion },
-		"formatDecimal": formatDecimal,
-		"formatPercent": formatPercent,
+		"styleURL":            func() string { return "/static/style.css?v=" + styleVersion },
+		"formatDecimal":       formatDecimal,
+		"formatSignedDecimal": formatSignedDecimal,
+		"formatPercent":       formatPercent,
 	}).ParseFS(webFiles, "web/templates/*.tmpl")
 }
 
@@ -62,6 +63,13 @@ func formatDecimal(value *float64) string {
 		return "—"
 	}
 	return strconv.FormatFloat(*value, 'f', 1, 64)
+}
+
+func formatSignedDecimal(value *float64) string {
+	if value == nil {
+		return "—"
+	}
+	return fmt.Sprintf("%+.1f", *value)
 }
 
 func formatPercent(value *int) string {
@@ -86,16 +94,13 @@ type PageData struct {
 }
 
 type RecentSummaryView struct {
-	Games                   int
-	Wins                    int
-	Losses                  int
-	WinRatePercent          int
-	AverageKDA              float64
-	AverageCSPerMinute      *float64
-	MostPlayedChampion      string
-	MostPlayedChampionGames int
-	Champions               []ChampionSummaryView
-	Roles                   []RoleSummaryView
+	Games                int
+	AverageGoldDeltaAt15 *float64
+	AverageXPDeltaAt15   *float64
+	AverageCSDeltaAt15   *float64
+	DeathsPer10Minutes   *float64
+	Champions            []ChampionSummaryView
+	Roles                []RoleSummaryView
 }
 
 type ChampionSummaryView struct {
@@ -150,6 +155,10 @@ type MatchView struct {
 	LaneMinionsFirst10Minutes *int
 	KillParticipationPercent  *int
 	Gold                      int
+	GoldDeltaAt15             *int
+	XPDeltaAt15               *int
+	CSDeltaAt15               *int
+	DurationSeconds           float64
 	ItemIconURLs              []string
 	SummonerSpellIconURLs     []string
 }
@@ -439,20 +448,27 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 	summary := &RecentSummaryView{Games: len(matches)}
 	champions := make(map[string]*championSummaryAggregate)
 	roles := make(map[string]*roleSummaryAggregate)
-	var kills, deaths, assists int
-	var csPerMinuteTotal float64
-	var csPerMinuteGames int
+	var deaths int
+	var durationSeconds float64
+	var goldDeltaTotal, xpDeltaTotal, csDeltaTotal int
+	var goldDeltaGames, xpDeltaGames, csDeltaGames int
 
 	for i, match := range matches {
-		if match.Win {
-			summary.Wins++
+		if match.DurationSeconds > 0 {
+			deaths += match.Deaths
+			durationSeconds += match.DurationSeconds
 		}
-		kills += match.Kills
-		deaths += match.Deaths
-		assists += match.Assists
-		if match.CSPerMinute != nil {
-			csPerMinuteTotal += *match.CSPerMinute
-			csPerMinuteGames++
+		if match.GoldDeltaAt15 != nil {
+			goldDeltaTotal += *match.GoldDeltaAt15
+			goldDeltaGames++
+		}
+		if match.XPDeltaAt15 != nil {
+			xpDeltaTotal += *match.XPDeltaAt15
+			xpDeltaGames++
+		}
+		if match.CSDeltaAt15 != nil {
+			csDeltaTotal += *match.CSDeltaAt15
+			csDeltaGames++
 		}
 		if match.ChampionName != "" {
 			agg := champions[match.ChampionName]
@@ -485,18 +501,23 @@ func recentSummary(matches []MatchView) *RecentSummaryView {
 		}
 	}
 
-	summary.Losses = summary.Games - summary.Wins
-	summary.WinRatePercent = int(math.Round(float64(summary.Wins) * 100 / float64(summary.Games)))
-	summary.AverageKDA = float64(kills+assists) / float64(max(deaths, 1))
-	if csPerMinuteGames > 0 {
-		average := csPerMinuteTotal / float64(csPerMinuteGames)
-		summary.AverageCSPerMinute = &average
+	if goldDeltaGames > 0 {
+		average := float64(goldDeltaTotal) / float64(goldDeltaGames)
+		summary.AverageGoldDeltaAt15 = &average
+	}
+	if xpDeltaGames > 0 {
+		average := float64(xpDeltaTotal) / float64(xpDeltaGames)
+		summary.AverageXPDeltaAt15 = &average
+	}
+	if csDeltaGames > 0 {
+		average := float64(csDeltaTotal) / float64(csDeltaGames)
+		summary.AverageCSDeltaAt15 = &average
+	}
+	if durationSeconds > 0 {
+		rate := float64(deaths) * 10 * 60 / float64(durationSeconds)
+		summary.DeathsPer10Minutes = &rate
 	}
 	summary.Champions = championSummaryViews(champions)
-	if len(summary.Champions) > 0 {
-		summary.MostPlayedChampion = summary.Champions[0].ChampionName
-		summary.MostPlayedChampionGames = summary.Champions[0].Games
-	}
 	summary.Roles = roleSummaryViews(roles)
 	return summary
 }
@@ -579,7 +600,7 @@ type RiotClient struct {
 	matchCacheMu       sync.RWMutex
 	matchCache         map[string]matchDTO
 	timelineCacheMu    sync.RWMutex
-	firstBloodVictims  map[string]int
+	timelineCache      map[string]timelineDTO
 }
 
 type accountDTO struct {
@@ -672,10 +693,21 @@ type participantDTO struct {
 
 type timelineDTO struct {
 	Info struct {
-		Frames []struct {
-			Events []timelineEventDTO `json:"events"`
-		} `json:"frames"`
+		Frames []timelineFrameDTO `json:"frames"`
 	} `json:"info"`
+}
+
+type timelineFrameDTO struct {
+	Timestamp         int64                                  `json:"timestamp"`
+	ParticipantFrames map[string]timelineParticipantFrameDTO `json:"participantFrames"`
+	Events            []timelineEventDTO                     `json:"events"`
+}
+
+type timelineParticipantFrameDTO struct {
+	TotalGold           int `json:"totalGold"`
+	XP                  int `json:"xp"`
+	MinionsKilled       int `json:"minionsKilled"`
+	JungleMinionsKilled int `json:"jungleMinionsKilled"`
 }
 
 type timelineEventDTO struct {
@@ -702,8 +734,8 @@ func (c *RiotClient) MatchDetail(ctx context.Context, matchID, me string, now ti
 	if err != nil {
 		return nil, err
 	}
-	firstBloodVictimID, _ := c.lookupFirstBloodVictimID(ctx, region, matchID)
-	view := c.matchDetailView(dto, me, region, now, firstBloodVictimID)
+	timeline, _ := c.lookupTimelineDTO(ctx, region, matchID)
+	view := c.matchDetailView(dto, me, region, now, firstBloodVictimID(timeline))
 	view.Query = strings.TrimSpace(me)
 	view.Region = region
 	return &view, nil
@@ -725,7 +757,7 @@ func NewRiotClient(apiKey string) *RiotClient {
 		MinRequestInterval: 60 * time.Millisecond,
 		nextRequest:        make(map[string]time.Time),
 		matchCache:         make(map[string]matchDTO),
-		firstBloodVictims:  make(map[string]int),
+		timelineCache:      make(map[string]timelineDTO),
 	}
 }
 
@@ -858,7 +890,8 @@ func (c *RiotClient) lookupMatches(ctx context.Context, region, puuid string, id
 				errMu.Unlock()
 				return
 			}
-			views[i] = c.matchView(dto, puuid, now)
+			timeline, _ := c.lookupTimelineDTO(ctx, region, id)
+			views[i] = c.matchView(dto, timeline, puuid, now)
 		}()
 	}
 	wg.Wait()
@@ -890,20 +923,30 @@ func (c *RiotClient) lookupMatchDTO(ctx context.Context, region, matchID string)
 	return dto, nil
 }
 
-func (c *RiotClient) lookupFirstBloodVictimID(ctx context.Context, region, matchID string) (int, error) {
+func (c *RiotClient) lookupTimelineDTO(ctx context.Context, region, matchID string) (timelineDTO, error) {
 	key := strings.ToUpper(strings.TrimSpace(matchID))
 	c.timelineCacheMu.RLock()
-	victimID, ok := c.firstBloodVictims[key]
+	timeline, ok := c.timelineCache[key]
 	c.timelineCacheMu.RUnlock()
 	if ok {
-		return victimID, nil
+		return timeline, nil
 	}
 
 	endpoint := c.RegionalBaseURL(region) + "/lol/match/v5/matches/" + url.PathEscape(matchID) + "/timeline"
-	var timeline timelineDTO
 	if err := c.getJSON(ctx, endpoint, &timeline); err != nil {
-		return 0, err
+		return timelineDTO{}, err
 	}
+	c.timelineCacheMu.Lock()
+	if c.timelineCache == nil {
+		c.timelineCache = make(map[string]timelineDTO)
+	}
+	c.timelineCache[key] = timeline
+	c.timelineCacheMu.Unlock()
+	return timeline, nil
+}
+
+func firstBloodVictimID(timeline timelineDTO) int {
+	var victimID int
 	var firstTimestamp int64
 	for _, frame := range timeline.Info.Frames {
 		for _, event := range frame.Events {
@@ -916,13 +959,7 @@ func (c *RiotClient) lookupFirstBloodVictimID(ctx context.Context, region, match
 			}
 		}
 	}
-	c.timelineCacheMu.Lock()
-	if c.firstBloodVictims == nil {
-		c.firstBloodVictims = make(map[string]int)
-	}
-	c.firstBloodVictims[key] = victimID
-	c.timelineCacheMu.Unlock()
-	return victimID, nil
+	return victimID
 }
 
 func (c *RiotClient) getJSON(ctx context.Context, endpoint string, dst any) error {
@@ -993,7 +1030,7 @@ func (c *RiotClient) waitForRequestSlot(ctx context.Context, host string) error 
 	}
 }
 
-func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time) MatchView {
+func (c *RiotClient) matchView(dto matchDTO, timeline timelineDTO, searchedPUUID string, now time.Time) MatchView {
 	version := majorMinorVersion(dto.Info.GameVersion)
 	if version == "" {
 		version = c.DataDragonVer
@@ -1022,9 +1059,11 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 		LaneMinionsFirst10Minutes: player.Challenges.LaneMinionsFirst10Minutes,
 		KillParticipationPercent:  killParticipationPercent(player, dto.Info.Participants),
 		Gold:                      player.GoldEarned,
+		DurationSeconds:           durationSeconds(dto.Info.GameDuration),
 		ItemIconURLs:              make([]string, 7),
 		SummonerSpellIconURLs:     make([]string, 2),
 	}
+	view.GoldDeltaAt15, view.XPDeltaAt15, view.CSDeltaAt15 = laneDeltasAt15(player, dto.Info.Participants, timeline)
 	items := []int{player.Item0, player.Item1, player.Item2, player.Item3, player.Item4, player.Item5, player.Item6}
 	for i, item := range items {
 		if item != 0 {
@@ -1034,6 +1073,57 @@ func (c *RiotClient) matchView(dto matchDTO, searchedPUUID string, now time.Time
 	view.SummonerSpellIconURLs[0] = c.spellURL(version, player.Summoner1ID)
 	view.SummonerSpellIconURLs[1] = c.spellURL(version, player.Summoner2ID)
 	return view
+}
+
+func laneDeltasAt15(player participantDTO, participants []participantDTO, timeline timelineDTO) (*int, *int, *int) {
+	position := strings.ToUpper(strings.TrimSpace(player.TeamPosition))
+	if player.ParticipantID <= 0 || !isLanePosition(position) {
+		return nil, nil, nil
+	}
+	var opponent participantDTO
+	matches := 0
+	for _, candidate := range participants {
+		if candidate.TeamID != player.TeamID && candidate.ParticipantID > 0 && strings.EqualFold(candidate.TeamPosition, position) {
+			opponent = candidate
+			matches++
+		}
+	}
+	if matches != 1 {
+		return nil, nil, nil
+	}
+
+	const target = int64(15 * time.Minute / time.Millisecond)
+	const latest = int64(16 * time.Minute / time.Millisecond)
+	for _, frame := range timeline.Info.Frames {
+		if frame.Timestamp < target {
+			continue
+		}
+		if frame.Timestamp > latest {
+			break
+		}
+		playerFrame, playerOK := frame.ParticipantFrames[strconv.Itoa(player.ParticipantID)]
+		opponentFrame, opponentOK := frame.ParticipantFrames[strconv.Itoa(opponent.ParticipantID)]
+		if !playerOK || !opponentOK {
+			return nil, nil, nil
+		}
+		gold := playerFrame.TotalGold - opponentFrame.TotalGold
+		xp := playerFrame.XP - opponentFrame.XP
+		cs := playerFrame.MinionsKilled - opponentFrame.MinionsKilled
+		if position == "JUNGLE" {
+			cs = playerFrame.JungleMinionsKilled - opponentFrame.JungleMinionsKilled
+		}
+		return &gold, &xp, &cs
+	}
+	return nil, nil, nil
+}
+
+func isLanePosition(position string) bool {
+	switch position {
+	case "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *RiotClient) matchDetailView(dto matchDTO, me, region string, now time.Time, firstBloodVictimID int) MatchDetailView {

@@ -152,6 +152,12 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if m.KillParticipationPercent == nil || *m.KillParticipationPercent != 100 {
 		t.Fatalf("list KP = %v, want capped 100%%", m.KillParticipationPercent)
 	}
+	if m.GoldDeltaAt15 == nil || *m.GoldDeltaAt15 != 500 || m.XPDeltaAt15 == nil || *m.XPDeltaAt15 != 500 || m.CSDeltaAt15 == nil || *m.CSDeltaAt15 != 15 {
+		t.Fatalf("list @15 deltas = gold %v, XP %v, CS %v", m.GoldDeltaAt15, m.XPDeltaAt15, m.CSDeltaAt15)
+	}
+	if m.DurationSeconds != 1934 {
+		t.Fatalf("DurationSeconds = %v, want 1934", m.DurationSeconds)
+	}
 	if len(m.ItemIconURLs) != 7 || m.ItemIconURLs[2] != "" || len(m.SummonerSpellIconURLs) != 2 {
 		t.Fatalf("asset slots = %#v / %#v", m.ItemIconURLs, m.SummonerSpellIconURLs)
 	}
@@ -316,27 +322,33 @@ func TestRequestedMatchCountDefaultsAndCaps(t *testing.T) {
 
 func TestRecentSummaryUsesAvailableLastTwentyMatchStats(t *testing.T) {
 	csSix, csEight := 6.0, 8.0
+	goldOne, goldTwo := 300, -100
+	xpOne, xpTwo := 200, -50
+	csOne, csTwo := 12, -4
 	matches := []MatchView{
-		{Win: true, ChampionName: "Ahri", ChampionIconURL: "ahri.png", RoleLabel: "Mid", Kills: 10, Deaths: 2, Assists: 8, CSPerMinute: &csSix},
-		{Win: false, ChampionName: "Lux", RoleLabel: "Support", Kills: 2, Deaths: 4, Assists: 6, CSPerMinute: &csEight},
-		{Win: true, ChampionName: "Ahri", RoleLabel: "Mid", Kills: 6, Deaths: 0, Assists: 4},
+		{Win: true, ChampionName: "Ahri", ChampionIconURL: "ahri.png", RoleLabel: "Mid", Kills: 10, Deaths: 2, Assists: 8, CSPerMinute: &csSix, GoldDeltaAt15: &goldOne, XPDeltaAt15: &xpOne, CSDeltaAt15: &csOne, DurationSeconds: 1200},
+		{Win: false, ChampionName: "Lux", RoleLabel: "Support", Kills: 2, Deaths: 4, Assists: 6, CSPerMinute: &csEight, GoldDeltaAt15: &goldTwo, XPDeltaAt15: &xpTwo, CSDeltaAt15: &csTwo, DurationSeconds: 1800},
+		{Win: true, ChampionName: "Ahri", RoleLabel: "Mid", Kills: 6, Deaths: 0, Assists: 4, DurationSeconds: 600},
 	}
 
 	got := recentSummary(matches)
 	if got == nil {
 		t.Fatal("recentSummary returned nil")
 	}
-	if got.Games != 3 || got.Wins != 2 || got.Losses != 1 || got.WinRatePercent != 67 {
-		t.Fatalf("record = %#v", got)
+	if got.Games != 3 {
+		t.Fatalf("Games = %d, want 3", got.Games)
 	}
-	if math.Abs(got.AverageKDA-6) > 0.001 {
-		t.Fatalf("AverageKDA = %v, want 6.0", got.AverageKDA)
+	if got.AverageGoldDeltaAt15 == nil || math.Abs(*got.AverageGoldDeltaAt15-100) > 0.001 {
+		t.Fatalf("AverageGoldDeltaAt15 = %v, want 100", got.AverageGoldDeltaAt15)
 	}
-	if got.AverageCSPerMinute == nil || math.Abs(*got.AverageCSPerMinute-7) > 0.001 {
-		t.Fatalf("AverageCSPerMinute = %v, want 7.0", got.AverageCSPerMinute)
+	if got.AverageXPDeltaAt15 == nil || math.Abs(*got.AverageXPDeltaAt15-75) > 0.001 {
+		t.Fatalf("AverageXPDeltaAt15 = %v, want 75", got.AverageXPDeltaAt15)
 	}
-	if got.MostPlayedChampion != "Ahri" || got.MostPlayedChampionGames != 2 {
-		t.Fatalf("most played = %q/%d, want Ahri/2", got.MostPlayedChampion, got.MostPlayedChampionGames)
+	if got.AverageCSDeltaAt15 == nil || math.Abs(*got.AverageCSDeltaAt15-4) > 0.001 {
+		t.Fatalf("AverageCSDeltaAt15 = %v, want 4", got.AverageCSDeltaAt15)
+	}
+	if got.DeathsPer10Minutes == nil || math.Abs(*got.DeathsPer10Minutes-1) > 0.001 {
+		t.Fatalf("DeathsPer10Minutes = %v, want 1", got.DeathsPer10Minutes)
 	}
 	if len(got.Champions) != 2 || got.Champions[0].ChampionName != "Ahri" || got.Champions[0].Games != 2 || got.Champions[0].WinRatePercent != 100 || got.Champions[0].ChampionIconURL != "ahri.png" {
 		t.Fatalf("champion summaries = %#v", got.Champions)
@@ -415,14 +427,14 @@ func TestRecentSummaryHandlesMissingOptionalStatsAndTiesDeterministically(t *tes
 		{ChampionName: "Lux", Kills: 1},
 		{ChampionName: "Ahri", Assists: 1},
 	})
-	if got.AverageCSPerMinute != nil {
-		t.Fatalf("missing CS/min average = %v, want nil", got.AverageCSPerMinute)
+	if got.AverageGoldDeltaAt15 != nil || got.AverageXPDeltaAt15 != nil || got.AverageCSDeltaAt15 != nil {
+		t.Fatalf("missing @15 averages = %#v", got)
 	}
-	if got.MostPlayedChampion != "Lux" {
-		t.Fatalf("tie winner = %q, want first-seen Lux", got.MostPlayedChampion)
+	if got.DeathsPer10Minutes != nil {
+		t.Fatalf("missing duration death rate = %v, want nil", got.DeathsPer10Minutes)
 	}
-	if got.AverageKDA != 2 {
-		t.Fatalf("zero-death KDA = %v, want 2", got.AverageKDA)
+	if len(got.Champions) != 2 || got.Champions[0].ChampionName != "Lux" {
+		t.Fatalf("tie winner = %#v, want first-seen Lux", got.Champions)
 	}
 	if recentSummary(nil) != nil {
 		t.Fatal("empty summary should be nil")
@@ -432,12 +444,11 @@ func TestRecentSummaryHandlesMissingOptionalStatsAndTiesDeterministically(t *tes
 func TestEmbeddedIndexTemplateRendersRecentSummary(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
 	cs := 7.2
+	gold, xp, csDelta, deaths := 234.5, -87.5, 6.5, 1.2
 	data := PageData{
 		Profile: &ProfileView{},
 		RecentSummary: &RecentSummaryView{
-			Games: 20, Wins: 12, Losses: 8, WinRatePercent: 60,
-			AverageKDA: 3.45, AverageCSPerMinute: &cs,
-			MostPlayedChampion: "Ahri", MostPlayedChampionGames: 6,
+			Games: 20, AverageGoldDeltaAt15: &gold, AverageXPDeltaAt15: &xp, AverageCSDeltaAt15: &csDelta, DeathsPer10Minutes: &deaths,
 			Champions: []ChampionSummaryView{{ChampionName: "Ahri", Games: 6, WinRatePercent: 67, AverageKDA: 4.2, AverageCSPerMinute: &cs}},
 			Roles:     []RoleSummaryView{{Role: "Mid", Games: 15, WinRatePercent: 60}},
 		},
@@ -446,13 +457,15 @@ func TestEmbeddedIndexTemplateRendersRecentSummary(t *testing.T) {
 	if err := tmpl.ExecuteTemplate(&buf, "content", data); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"last 20 matches", "12w 8l", "60%", "3.45", "7.2", "Ahri", "most played · 6 games", "recent champions", "6 games · 67% wr", "recent roles", "15 games"} {
+	for _, want := range []string{"last 20 matches", "&#43;234.5", "-87.5", "&#43;6.5", "1.2", "gold diff @15", "xp diff @15", "cs diff @15", "deaths / 10m", "Ahri", "recent champions", "6 games · 67% wr", "recent roles", "15 games"} {
 		if !strings.Contains(buf.String(), want) {
 			t.Fatalf("summary does not contain %q: %s", want, buf.String())
 		}
 	}
-	if strings.Contains(buf.String(), "csΔ") {
-		t.Fatalf("summary unexpectedly renders CS delta: %s", buf.String())
+	for _, old := range []string{"record", "win rate", "avg kda", "avg cs/min", "most played"} {
+		if strings.Contains(buf.String(), old) {
+			t.Fatalf("summary still renders old stat %q: %s", old, buf.String())
+		}
 	}
 }
 
@@ -593,6 +606,64 @@ func TestMatchDetailCachesRawMatchButRebuildsViewerSpecificView(t *testing.T) {
 	}
 }
 
+func TestLaneDeltasAt15UsesRoleAppropriateCreepScore(t *testing.T) {
+	participants := []participantDTO{
+		{ParticipantID: 1, TeamID: 100, TeamPosition: "MIDDLE"},
+		{ParticipantID: 2, TeamID: 100, TeamPosition: "JUNGLE"},
+		{ParticipantID: 6, TeamID: 200, TeamPosition: "MIDDLE"},
+		{ParticipantID: 7, TeamID: 200, TeamPosition: "JUNGLE"},
+	}
+	var timeline timelineDTO
+	frame := timelineFrameDTO{
+		Timestamp: 900_000,
+		ParticipantFrames: map[string]timelineParticipantFrameDTO{
+			"1": {TotalGold: 6000, XP: 7000, MinionsKilled: 120, JungleMinionsKilled: 3},
+			"2": {TotalGold: 5900, XP: 6800, MinionsKilled: 15, JungleMinionsKilled: 82},
+			"6": {TotalGold: 5500, XP: 6500, MinionsKilled: 105, JungleMinionsKilled: 4},
+			"7": {TotalGold: 6100, XP: 7000, MinionsKilled: 8, JungleMinionsKilled: 74},
+		},
+	}
+	timeline.Info.Frames = append(timeline.Info.Frames, frame)
+
+	gold, xp, cs := laneDeltasAt15(participants[0], participants, timeline)
+	if gold == nil || *gold != 500 || xp == nil || *xp != 500 || cs == nil || *cs != 15 {
+		t.Fatalf("mid deltas = gold %v, XP %v, CS %v", gold, xp, cs)
+	}
+	gold, xp, cs = laneDeltasAt15(participants[1], participants, timeline)
+	if gold == nil || *gold != -200 || xp == nil || *xp != -200 || cs == nil || *cs != 8 {
+		t.Fatalf("jungle deltas = gold %v, XP %v, jungle CS %v", gold, xp, cs)
+	}
+}
+
+func TestLaneDeltasAt15RequiresAValidFrameAndUniqueOpponent(t *testing.T) {
+	player := participantDTO{ParticipantID: 1, TeamID: 100, TeamPosition: "TOP"}
+	opponent := participantDTO{ParticipantID: 6, TeamID: 200, TeamPosition: "TOP"}
+	for _, tc := range []struct {
+		name         string
+		participants []participantDTO
+		timestamp    int64
+		frames       map[string]timelineParticipantFrameDTO
+	}{
+		{name: "no opponent", participants: []participantDTO{player}, timestamp: 900_000, frames: map[string]timelineParticipantFrameDTO{"1": {}}},
+		{name: "ambiguous opponent", participants: []participantDTO{player, opponent, {ParticipantID: 7, TeamID: 200, TeamPosition: "TOP"}}, timestamp: 900_000, frames: map[string]timelineParticipantFrameDTO{"1": {}, "6": {}, "7": {}}},
+		{name: "frame before fifteen", participants: []participantDTO{player, opponent}, timestamp: 899_999, frames: map[string]timelineParticipantFrameDTO{"1": {}, "6": {}}},
+		{name: "missing participant frame", participants: []participantDTO{player, opponent}, timestamp: 900_000, frames: map[string]timelineParticipantFrameDTO{"1": {}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var timeline timelineDTO
+			timeline.Info.Frames = append(timeline.Info.Frames, timelineFrameDTO{Timestamp: tc.timestamp, ParticipantFrames: tc.frames})
+			gold, xp, cs := laneDeltasAt15(player, tc.participants, timeline)
+			if gold != nil || xp != nil || cs != nil {
+				t.Fatalf("laneDeltasAt15() = %v/%v/%v, want unknown", gold, xp, cs)
+			}
+		})
+	}
+	unknown := participantDTO{ParticipantID: 1, TeamID: 100, TeamPosition: "INVALID"}
+	if gold, xp, cs := laneDeltasAt15(unknown, []participantDTO{unknown, {ParticipantID: 6, TeamID: 200, TeamPosition: "INVALID"}}, timelineDTO{}); gold != nil || xp != nil || cs != nil {
+		t.Fatalf("unknown-role deltas = %v/%v/%v, want unknown", gold, xp, cs)
+	}
+}
+
 func TestFailedMatchDetailIsNotCached(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -637,6 +708,37 @@ func TestMatchDetailStillRendersWhenTimelineIsUnavailable(t *testing.T) {
 	}
 	if requests != 2 || len(detail.Team1.Players) == 0 {
 		t.Fatalf("requests/detail = %d/%#v", requests, detail)
+	}
+}
+
+func TestSearchStillReturnsMatchesWhenTimelineIsUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/riot/account/v1/accounts/by-riot-id/"):
+			w.Write([]byte(`{"puuid":"player-puuid","gameName":"Hide on bush","tagLine":"KR1"}`))
+		case strings.HasPrefix(r.URL.Path, "/lol/summoner/v4/summoners/by-puuid/"):
+			w.Write([]byte(`{"profileIconId":4568,"summonerLevel":777}`))
+		case strings.HasPrefix(r.URL.Path, "/lol/league/v4/entries/by-puuid/"):
+			w.Write([]byte(`[]`))
+		case strings.HasSuffix(r.URL.Path, "/ids"):
+			w.Write([]byte(`["KR_1"]`))
+		case strings.HasSuffix(r.URL.Path, "/timeline"):
+			w.WriteHeader(http.StatusServiceUnavailable)
+		case strings.HasSuffix(r.URL.Path, "/KR_1"):
+			w.Write([]byte(matchFixtureJSON))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, matches, err := newTestRiotClient(server.URL).Search(context.Background(), "Hide on bush#KR1", "kr", time.Now())
+	if err != nil {
+		t.Fatalf("Search failed because timeline was unavailable: %v", err)
+	}
+	if len(matches) != 1 || matches[0].GoldDeltaAt15 != nil || matches[0].XPDeltaAt15 != nil || matches[0].CSDeltaAt15 != nil {
+		t.Fatalf("matches = %#v, want one match with unknown @15 stats", matches)
 	}
 }
 
@@ -1010,8 +1112,12 @@ const matchFixtureJSON = `{
 
 const timelineFixtureJSON = `{
   "info":{"frames":[
-    {"events":[]},
-    {"events":[
+    {"timestamp":0,"events":[]},
+    {"timestamp":900000,"participantFrames":{
+      "1":{"totalGold":6000,"xp":7000,"minionsKilled":120,"jungleMinionsKilled":0},
+      "2":{"totalGold":5200,"xp":6100,"minionsKilled":10,"jungleMinionsKilled":80},
+      "3":{"totalGold":5500,"xp":6500,"minionsKilled":105,"jungleMinionsKilled":0}
+    },"events":[
       {"type":"CHAMPION_KILL","timestamp":125000,"victimId":3},
       {"type":"CHAMPION_KILL","timestamp":250000,"victimId":1}
     ]}
