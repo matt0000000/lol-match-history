@@ -68,7 +68,10 @@
       <tr{{if .IsHighlighted}} class="me"{{end}}>
         <td class="player-cell">
           <div class="player-inner">
-            <img class="champ-icon-img" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
+            <div class="champ-portrait">
+              <img class="champ-icon-img" src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">
+              {{if gt .ChampionLevel 0}}<span class="champ-level">{{.ChampionLevel}}</span>{{end}}
+            </div>
             <div class="spell-col">
               {{range .SummonerSpellIconURLs}}<img class="spell-icon-img" src="{{.}}" alt="">{{end}}
             </div>

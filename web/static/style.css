@@ -317,7 +317,13 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .player-identity { min-width: 0; flex: 1; }
 .player-identity .performance-labels { margin-top: 3px; }
 .player-identity .performance-tag { font-size: 8px; line-height: 1.4; }
-.player-inner .champ-icon-img { width: 40px; height: 40px; flex-shrink: 0; }
+.champ-portrait { position: relative; width: 40px; height: 40px; flex: 0 0 40px; }
+.player-inner .champ-icon-img { display: block; width: 40px; height: 40px; }
+.champ-level {
+  position: absolute; right: 1px; bottom: 1px; min-width: 14px; height: 14px; padding: 0 2px;
+  border: 1px solid var(--border); background: rgba(13, 17, 23, 0.92); color: #fff;
+  font-size: 9px; font-weight: bold; line-height: 12px; text-align: center;
+}
 .player-inner .spell-icon-img { width: 18px; height: 18px; }
 
 .riot-id {

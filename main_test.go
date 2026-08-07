@@ -523,7 +523,7 @@ func TestRiotClientBuildsMatchDetailFromIDPrefix(t *testing.T) {
 		t.Fatalf("objectives = %#v / %#v", detail.Team1.Objectives, detail.Team2.Objectives)
 	}
 	p := detail.Team1.Players[0]
-	if p.RiotID != "Hide on bush#KR1" || p.Region != "kr" || p.ChampionName != "Ahri" || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || p.DamagePercent != 59 || !p.IsHighlighted {
+	if p.RiotID != "Hide on bush#KR1" || p.Region != "kr" || p.ChampionName != "Ahri" || p.ChampionLevel != 18 || p.Kills != 10 || p.Deaths != 2 || p.Assists != 8 || p.CS != 201 || p.Gold != 12345 || p.Damage != 23456 || p.DamagePercent != 59 || !p.IsHighlighted {
 		t.Fatalf("player = %#v", p)
 	}
 	if p.LaneMinionsFirst10Minutes == nil || *p.LaneMinionsFirst10Minutes != 73 {
@@ -891,7 +891,7 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	data := MatchDetailView{
 		GameModeLabel: "Ranked Solo/Duo",
 		Team1: TeamView{Win: true, Objectives: ObjectiveView{Towers: 9, Dragons: 3, Barons: 1, Heralds: 1, Grubs: 4}, Players: []PlayerStatsView{
-			{LaneMinionsFirst10Minutes: &seventyThree, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, Gold: 12000, GoldPerMinute: &sixPointTwo, Damage: 24000, DamageSharePercent: &thirtyFive, DamagePerMinute: &sixPointTwo, VisionScore: 42, VisionPerMinute: &sixPointTwo, ControlWards: 3, ObjectiveDamage: 9000, TurretDamage: 4000, PerformanceLabels: []PerformanceLabelView{{Text: "damage carry", Tone: "good", Description: performanceLabelDescription("damage carry")}}},
+			{ChampionLevel: 18, LaneMinionsFirst10Minutes: &seventyThree, CSPerMinute: &sixPointTwo, KillParticipationPercent: &ninety, Gold: 12000, GoldPerMinute: &sixPointTwo, Damage: 24000, DamageSharePercent: &thirtyFive, DamagePerMinute: &sixPointTwo, VisionScore: 42, VisionPerMinute: &sixPointTwo, ControlWards: 3, ObjectiveDamage: 9000, TurretDamage: 4000, PerformanceLabels: []PerformanceLabelView{{Text: "damage carry", Tone: "good", Description: performanceLabelDescription("damage carry")}}},
 			{LaneMinionsFirst10Minutes: &zero},
 			{},
 			{},
@@ -906,6 +906,7 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<th>cs@10m</th>`,
 		`<th>kp</th>`,
 		`<th>vision</th>`,
+		`<span class="champ-level">18</span>`,
 		`<td class="num-cell" data-label="cs@10m">73</td>`,
 		`<td class="num-cell" data-label="cs@10m">0</td>`,
 		`<td class="num-cell" data-label="cs@10m">—</td>`,
@@ -1099,7 +1100,7 @@ const matchFixtureJSON = `{
     "gameVersion":"16.14.1.123",
     "queueId":420,
     "participants":[
-      {"participantId":1,"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","teamPosition":"MIDDLE","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"damageDealtToObjectives":12000,"damageDealtToTurrets":6000,"visionScore":50,"visionWardsBoughtInGame":3,"turretTakedowns":3,"firstBloodKill":true,"tripleKills":1,"challenges":{"laneMinionsFirst10Minutes":73,"soloKills":2},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
+      {"participantId":1,"puuid":"player-puuid","teamId":100,"win":true,"championName":"Ahri","champLevel":18,"teamPosition":"MIDDLE","kills":10,"deaths":2,"assists":8,"totalMinionsKilled":180,"neutralMinionsKilled":21,"goldEarned":12345,"totalDamageDealtToChampions":23456,"damageDealtToObjectives":12000,"damageDealtToTurrets":6000,"visionScore":50,"visionWardsBoughtInGame":3,"turretTakedowns":3,"firstBloodKill":true,"tripleKills":1,"challenges":{"laneMinionsFirst10Minutes":73,"soloKills":2},"item0":3089,"item1":3020,"item2":0,"item3":3135,"item4":1058,"item5":4645,"item6":3364,"summoner1Id":4,"summoner2Id":14,"riotIdGameName":"Hide on bush","riotIdTagline":"KR1"},
       {"participantId":2,"puuid":"ally","teamId":100,"win":true,"championName":"LeeSin","teamPosition":"JUNGLE","kills":1,"deaths":3,"assists":4,"goldEarned":8000,"totalDamageDealtToChampions":10000,"riotIdGameName":"Ally","riotIdTagline":"KR1"},
       {"participantId":3,"puuid":"enemy","teamId":200,"win":false,"championName":"Garen","teamPosition":"MIDDLE","kills":5,"deaths":5,"assists":2,"goldEarned":11000,"totalDamageDealtToChampions":40000,"challenges":{"laneMinionsFirst10Minutes":0},"riotIdGameName":"Enemy","riotIdTagline":"KR1"}
     ],

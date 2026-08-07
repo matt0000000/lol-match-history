@@ -204,6 +204,7 @@ type PlayerStatsView struct {
 	Region                    string
 	ChampionName              string
 	ChampionIconURL           string
+	ChampionLevel             int
 	Kills                     int
 	Deaths                    int
 	Assists                   int
@@ -657,6 +658,7 @@ type participantDTO struct {
 	TeamID                      int                      `json:"teamId"`
 	Win                         bool                     `json:"win"`
 	ChampionName                string                   `json:"championName"`
+	ChampionLevel               int                      `json:"champLevel"`
 	TeamPosition                string                   `json:"teamPosition"`
 	Kills                       int                      `json:"kills"`
 	Deaths                      int                      `json:"deaths"`
@@ -1396,6 +1398,7 @@ func (c *RiotClient) playerStatsView(version string, p participantDTO, participa
 		Region:                    region,
 		ChampionName:              p.ChampionName,
 		ChampionIconURL:           c.championURL(version, p.ChampionName),
+		ChampionLevel:             p.ChampionLevel,
 		Kills:                     p.Kills,
 		Deaths:                    p.Deaths,
 		Assists:                   p.Assists,
