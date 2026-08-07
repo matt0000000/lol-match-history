@@ -218,10 +218,10 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .performance-tag.bad { color: var(--loss); border-color: var(--loss); }
 
 .champ-block { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.champ-icon-img { width: 34px; height: 34px; border: 1px solid var(--border); }
+.champ-icon-img { width: 40px; height: 40px; border: 1px solid var(--border); }
 
 .spell-col { display: flex; flex-direction: column; gap: 2px; }
-.spell-icon-img { width: 14px; height: 14px; border: 1px solid var(--border); }
+.spell-icon-img { width: 19px; height: 19px; border: 1px solid var(--border); }
 
 .items-row { display: flex; flex-wrap: wrap; gap: 2px; flex-shrink: 0; }
 .item-slot-img { width: 40px; height: 40px; border: 1px solid var(--border); }
@@ -242,7 +242,6 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
     padding: 12px;
   }
   .result-block { width: auto; min-width: 0; }
-  .champ-icon-img { width: 28px; height: 28px; }
   .items-row { grid-column: 1 / -1; }
   .stat-cluster {
     grid-column: 1 / -1;
