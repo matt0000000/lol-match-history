@@ -16,7 +16,7 @@
       <input type="hidden" name="region" value="{{.Region}}">
       <input type="hidden" name="count" value="{{.RequestedMatches}}">
       <input type="hidden" name="refresh" value="1">
-      <button type="submit" class="btn muted">[ update ]</button>
+      <button type="submit" class="btn muted">Update</button>
     </form>
     <div class="last-updated">{{.LastUpdatedLabel}}</div>
   </div>
@@ -72,10 +72,10 @@
 {{end}}{{end}}
 
 <div class="section-label">recent matches<span class="rule"></span></div>
-<div class="panel">
+<div class="panel matches-panel">
 {{range .Matches}}
   <a class="panel-row match-row {{if .Win}}win{{else}}loss{{end}}" href="/match/{{.MatchID}}?me={{$.Query}}">
-    <span class="tag-badge">{{if .Win}}WIN{{else}}LOSS{{end}}</span>
+    <span class="tag-badge">{{if .Win}}VICTORY{{else}}DEFEAT{{end}}</span>
     <div class="result-block">{{.GameModeLabel}}<br>{{.TimeAgoLabel}}</div>
 
     <div class="champ-block">
@@ -101,7 +101,7 @@
   <input type="hidden" name="q" value="{{.Query}}">
   <input type="hidden" name="region" value="{{.Region}}">
   <input type="hidden" name="count" value="{{.NextMatchCount}}">
-  <button type="submit" class="btn muted">[ load 10 more ]</button>
+  <button type="submit" class="btn muted">Load 10 More</button>
 </form>
 {{end}}
 {{end}}

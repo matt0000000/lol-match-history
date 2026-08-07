@@ -476,7 +476,7 @@ func TestEmbeddedIndexTemplateRendersLoadMoreButton(t *testing.T) {
 	if err := tmpl.ExecuteTemplate(&buf, "content", data); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`class="load-more-form"`, `name="count" value="30"`, `[ load 10 more ]`} {
+	for _, want := range []string{`class="load-more-form"`, `name="count" value="30"`, `Load 10 More`} {
 		if !strings.Contains(buf.String(), want) {
 			t.Fatalf("load-more markup does not contain %q: %s", want, buf.String())
 		}
@@ -817,7 +817,7 @@ func TestEmbeddedMatchTemplateRendersDetailHandler(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"match-history", "back to match-history", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`, "[ copy link ]", "navigator.clipboard", "window.location.origin + window.location.pathname", "writeText(matchURL)"} {
+	for _, want := range []string{"match-history", "Match History", "Faker#KR1", `href="/?q=Faker%23KR1&amp;region=kr"`, "Copy Link", "navigator.clipboard", "window.location.origin + window.location.pathname", "writeText(matchURL)"} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
 		}

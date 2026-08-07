@@ -6,12 +6,11 @@
 <header>
   <div class="header-inner">
     <div class="prompt-line">
-      <span class="prompt-sigil">❯</span>
-      <span class="wordmark">match-history<span class="dim"> — riot match lookup</span></span>
-      <button type="button" class="btn theme-toggle" onclick="toggleTheme()" aria-label="Toggle color theme">[ theme ]</button>
+      <span class="prompt-sigil" aria-hidden="true">✦</span>
+      <span class="wordmark">MATCH HISTORY<span class="dim">LEAGUE OF LEGENDS</span></span>
+      <button type="button" class="btn theme-toggle" onclick="toggleTheme()" aria-label="Toggle color theme">Theme</button>
     </div>
     <form class="search-form" method="get" action="/">
-      <span class="sigil">$</span>
       <select name="region">
         <option value="na1" {{if eq .Region "na1"}}selected{{end}}>na1</option>
         <option value="euw1" {{if eq .Region "euw1"}}selected{{end}}>euw1</option>
@@ -25,8 +24,8 @@
         <option value="tr1" {{if eq .Region "tr1"}}selected{{end}}>tr1</option>
         <option value="ru" {{if eq .Region "ru"}}selected{{end}}>ru</option>
       </select>
-      <input type="text" name="q" placeholder="search name#tag" value="{{.Query}}" autocomplete="off">
-      <button type="submit" class="btn">[ search ]</button>
+      <input type="text" name="q" placeholder="Riot ID (Name#Tag)" value="{{.Query}}" autocomplete="off">
+      <button type="submit" class="btn">Search</button>
     </form>
   </div>
 </header>
@@ -35,7 +34,7 @@ function applyTheme(t){
   document.documentElement.setAttribute('data-theme', t);
   try { localStorage.setItem('theme', t); } catch (e) {}
   var b = document.querySelector('.theme-toggle');
-  if (b) b.textContent = t === 'dark' ? '[ light ]' : '[ dark ]';
+  if (b) b.textContent = t === 'dark' ? 'Light Mode' : 'Dark Mode';
 }
 function currentTheme(){
   var t = document.documentElement.getAttribute('data-theme');
@@ -45,7 +44,7 @@ function currentTheme(){
 function toggleTheme(){ applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'); }
 (function(){
   var b = document.querySelector('.theme-toggle');
-  if (b) b.textContent = currentTheme() === 'dark' ? '[ light ]' : '[ dark ]';
+  if (b) b.textContent = currentTheme() === 'dark' ? 'Light Mode' : 'Dark Mode';
 })();
 </script>
 {{end}}

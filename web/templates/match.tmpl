@@ -19,7 +19,7 @@
 {{end}}
 
 {{define "matchContent"}}
-<a class="back-link" href="/?q={{.Query}}&amp;region={{.Region}}">&larr; back to match-history</a>
+<a class="back-link" href="/?q={{.Query}}&amp;region={{.Region}}">&larr; Match History</a>
 
 {{if .Error}}
 <div class="error">{{.Error}}</div>
@@ -28,7 +28,7 @@
   <span class="mode">{{.GameModeLabel}}</span>
   <span class="muted">{{.DurationLabel}}</span>
   <span class="muted">{{.TimeAgoLabel}}</span>
-  <button type="button" class="btn muted copy-link" onclick="copyMatchLink(this)">[ copy link ]</button>
+  <button type="button" class="btn muted copy-link" onclick="copyMatchLink(this)">Copy Link</button>
 </div>
 
 {{template "teamGroup" .Team1}}
@@ -37,7 +37,7 @@
 {{end}}
 
 {{define "teamGroup"}}
-<div class="section-label">{{if .Win}}victory{{else}}defeat{{end}}<span class="rule"></span></div>
+<div class="section-label">{{if .Win}}Victory{{else}}Defeat{{end}}<span class="rule"></span></div>
 <div class="panel scoreboard-panel">
   <div class="team-head {{if .Win}}win{{else}}loss{{end}}">
     <span>team totals</span>
@@ -108,8 +108,8 @@
 function copyMatchLink(button) {
   var matchURL = window.location.origin + window.location.pathname;
   function done() {
-    button.textContent = '[ copied ]';
-    window.setTimeout(function () { button.textContent = '[ copy link ]'; }, 1500);
+    button.textContent = 'Copied';
+    window.setTimeout(function () { button.textContent = 'Copy Link'; }, 1500);
   }
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(matchURL).then(done);
