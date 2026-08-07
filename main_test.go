@@ -906,14 +906,12 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 	body := buf.String()
 	for _, want := range []string{
 		`<th>cs@10m</th>`,
-		`<th>kp</th>`,
 		`<th>vision</th>`,
 		`<span class="champ-level">18</span>`,
 		`<td class="num-cell" data-label="cs@10m">73</td>`,
 		`<td class="num-cell" data-label="cs@10m">0</td>`,
 		`<td class="num-cell" data-label="cs@10m">—</td>`,
 		`<span>0</span><small>6.2/min</small>`,
-		`<td class="num-cell" data-label="kp">90%</td>`,
 		`<span>24000</span><small>6.2/min</small>`,
 		`<small>6.2/min · 3 cw</small>`,
 		`title="Dealt at least 30% of the team’s champion damage.">damage carry</span>`,
@@ -927,7 +925,7 @@ func TestEmbeddedMatchTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 			t.Fatalf("detail body does not contain %q: %s", want, body)
 		}
 	}
-	for _, unwanted := range []string{`<th>cs/min</th>`, `<th>csΔ@10</th>`, `<th>objectives</th>`, `9000 obj`, `4000 turret`, `35%`} {
+	for _, unwanted := range []string{`<th>cs/min</th>`, `<th>csΔ@10</th>`, `<th>kp</th>`, `data-label="kp"`, `<th>objectives</th>`, `9000 obj`, `4000 turret`, `35%`} {
 		if strings.Contains(body, unwanted) {
 			t.Fatalf("detail body unexpectedly contains %q: %s", unwanted, body)
 		}

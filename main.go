@@ -54,7 +54,6 @@ func parseTemplates() (*template.Template, error) {
 		"styleURL":            func() string { return "/static/style.css?v=" + styleVersion },
 		"formatDecimal":       formatDecimal,
 		"formatSignedDecimal": formatSignedDecimal,
-		"formatPercent":       formatPercent,
 	}).ParseFS(webFiles, "web/templates/*.tmpl")
 }
 
@@ -70,13 +69,6 @@ func formatSignedDecimal(value *float64) string {
 		return "—"
 	}
 	return fmt.Sprintf("%+.1f", *value)
-}
-
-func formatPercent(value *int) string {
-	if value == nil {
-		return "—"
-	}
-	return strconv.Itoa(*value) + "%"
 }
 
 type PageData struct {

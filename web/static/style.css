@@ -313,12 +313,12 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .player-identity { min-width: 0; flex: 1; }
 .player-identity .performance-labels { margin-top: 3px; }
 .player-identity .performance-tag { font-size: 8px; line-height: 1.4; }
-.champ-portrait { position: relative; width: 40px; height: 40px; flex: 0 0 40px; }
-.player-inner .champ-icon-img { display: block; width: 40px; height: 40px; }
+.champ-portrait { position: relative; width: 48px; height: 48px; flex: 0 0 48px; }
+.player-inner .champ-icon-img { display: block; width: 48px; height: 48px; }
 .champ-level {
-  position: absolute; right: 1px; bottom: 1px; min-width: 14px; height: 14px; padding: 0 2px;
+  position: absolute; right: 1px; bottom: 1px; min-width: 16px; height: 16px; padding: 0 2px;
   border: 1px solid var(--border); background: rgba(13, 17, 23, 0.92); color: #fff;
-  font-size: 9px; font-weight: bold; line-height: 12px; text-align: center;
+  font-size: 10px; font-weight: bold; line-height: 14px; text-align: center;
 }
 .player-inner .spell-icon-img { width: 18px; height: 18px; }
 
@@ -347,7 +347,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 
 .items-inner { display: flex; gap: 2px; }
 .items-inner .item-slot-img,
-.items-inner .item-slot.empty { width: 28px; height: 28px; }
+.items-inner .item-slot.empty { width: 36px; height: 36px; }
 
 @media (max-width: 680px) {
   .back-link { margin-bottom: 12px; }
@@ -390,7 +390,7 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
     padding: 10px 8px 8px;
     border-bottom: 1px dashed var(--border);
   }
-  .scoretable .dmg-cell { grid-column: span 2; }
+  .scoretable .dmg-cell { grid-column: span 3; }
   .scoretable .items-cell {
     grid-column: 1 / -1;
     padding-top: 4px;
