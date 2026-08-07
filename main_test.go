@@ -835,17 +835,19 @@ func TestEmbeddedIndexTemplateRendersRedesignedMatchStats(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"123", "cs", "cs/min", "cs@10m", "kp"} {
+	for _, want := range []string{"123", `<span class="k">kda</span>`, `<span class="k">cs</span>`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("body does not contain %q: %s", want, rr.Body.String())
 		}
 	}
-	if strings.Contains(rr.Body.String(), `<span class="k">gold</span>`) {
-		t.Fatalf("compact history row still renders raw gold: %s", rr.Body.String())
+	for _, unwanted := range []string{`<span class="k">gold</span>`, `<span class="k">cs/min</span>`, `<span class="k">cs@10m</span>`, `<span class="k">kp</span>`} {
+		if strings.Contains(rr.Body.String(), unwanted) {
+			t.Fatalf("compact history row still renders %q: %s", unwanted, rr.Body.String())
+		}
 	}
 }
 
-func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
+func TestEmbeddedIndexTemplateOmitsAdvancedMatchStats(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
 	seventyThree, zero, ninety := 73, 0, 90
 	sixPointTwo := 6.2
@@ -863,7 +865,7 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := buf.String()
-	for _, want := range []string{
+	for _, unwanted := range []string{
 		`<span class="v">73</span><br><span class="k">cs@10m</span>`,
 		`<span class="v">0</span><br><span class="k">cs@10m</span>`,
 		`<span class="v">—</span><br><span class="k">cs@10m</span>`,
@@ -872,8 +874,8 @@ func TestEmbeddedIndexTemplateRendersLaneMinionsFirst10Minutes(t *testing.T) {
 		`<span class="v">90%</span><br><span class="k">kp</span>`,
 		`<span class="v">—</span><br><span class="k">kp</span>`,
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("index body does not contain %q: %s", want, body)
+		if strings.Contains(body, unwanted) {
+			t.Fatalf("index body unexpectedly contains %q: %s", unwanted, body)
 		}
 	}
 	if strings.Contains(body, "performance-tag") {

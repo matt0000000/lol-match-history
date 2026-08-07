@@ -92,9 +92,6 @@
     <div class="stat-cluster">
       <div class="stat"><span class="v">{{.Kills}}/{{.Deaths}}/{{.Assists}}</span><br><span class="k">kda</span></div>
       <div class="stat"><span class="v">{{.CS}}</span><br><span class="k">cs</span></div>
-      <div class="stat"><span class="v">{{formatDecimal .CSPerMinute}}</span><br><span class="k">cs/min</span></div>
-      <div class="stat"><span class="v">{{with .LaneMinionsFirst10Minutes}}{{.}}{{else}}—{{end}}</span><br><span class="k">cs@10m</span></div>
-      <div class="stat"><span class="v">{{formatPercent .KillParticipationPercent}}</span><br><span class="k">kp</span></div>
     </div>
   </a>
 {{end}}
