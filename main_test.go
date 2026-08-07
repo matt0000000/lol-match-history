@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -121,6 +123,9 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	if profile.GameName != "Hide on bush" || profile.SummonerLevel != 777 {
 		t.Fatalf("profile = %#v", profile)
 	}
+	if profile.PUUID != "player-puuid" {
+		t.Fatalf("profile PUUID = %q", profile.PUUID)
+	}
 	if profile.SoloRank == nil || profile.SoloRank.Tier != "GOLD" || profile.SoloRank.Division != "II" || profile.SoloRank.LeaguePoints != 54 || profile.SoloRank.Wins != 13 || profile.SoloRank.Losses != 7 || profile.SoloRank.WinRatePercent != 65 {
 		t.Fatalf("solo rank = %#v", profile.SoloRank)
 	}
@@ -166,6 +171,125 @@ func TestRiotClientRoutesAndBuildsMatchView(t *testing.T) {
 	}
 	if len(paths) != 6 || !strings.Contains(paths[0], "Hide%20on%20bush/KR1") || !strings.Contains(paths[2], "/lol/league/v4/entries/by-puuid/") || !strings.Contains(paths[3], "start=0&count=10") || !strings.HasSuffix(paths[5], "/KR_1/timeline") {
 		t.Fatalf("paths = %#v", paths)
+	}
+}
+
+func TestLiveGameUsesCachedSpectatorGameAndLoadsTenRankEntries(t *testing.T) {
+	participants := make([]spectatorParticipantDTO, 10)
+	for i := range participants {
+		participants[i] = spectatorParticipantDTO{
+			PUUID:      fmt.Sprintf("puuid-%d", i+1),
+			RiotID:     fmt.Sprintf("Player %d#NA1", i+1),
+			ChampionID: 103,
+			TeamID:     100 + (i/5)*100,
+		}
+	}
+	game := spectatorGameDTO{GameID: 987, GameLength: -4, GameQueueConfigID: 420, Participants: participants}
+	var mu sync.Mutex
+	spectatorCalls, leagueCalls, catalogCalls := 0, 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "/lol/spectator/v5/active-games/by-summoner/"):
+			mu.Lock()
+			spectatorCalls++
+			mu.Unlock()
+			json.NewEncoder(w).Encode(game)
+		case strings.Contains(r.URL.Path, "/lol/league/v4/entries/by-puuid/"):
+			mu.Lock()
+			leagueCalls++
+			mu.Unlock()
+			w.Write([]byte(`[
+				{"queueType":"RANKED_SOLO_5x5","tier":"PLATINUM","rank":"III","leaguePoints":72,"wins":24,"losses":16},
+				{"queueType":"RANKED_FLEX_SR","tier":"SILVER","rank":"I","leaguePoints":20,"wins":5,"losses":5}
+			]`))
+		case strings.HasSuffix(r.URL.Path, "/data/en_US/champion.json"):
+			if token := r.Header.Get("X-Riot-Token"); token != "" {
+				t.Errorf("Data Dragon request leaked Riot token %q", token)
+			}
+			mu.Lock()
+			catalogCalls++
+			mu.Unlock()
+			w.Write([]byte(`{"data":{"Ahri":{"id":"Ahri","key":"103","name":"Ahri"}}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestRiotClient(server.URL)
+	client.DataDragonBase = server.URL
+	active, err := client.HasLiveGame(context.Background(), "na1", "puuid-1")
+	if err != nil || !active {
+		t.Fatalf("HasLiveGame() = %v, %v", active, err)
+	}
+	view, err := client.LoadLiveGame(context.Background(), "na1", "puuid-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.GameID != 987 || view.QueueLabel != "Ranked Solo/Duo" || view.RankQueueLabel != "Solo/Duo" || !view.Ranked {
+		t.Fatalf("live game labels = %#v", view)
+	}
+	if view.GameLengthSeconds != 0 || view.GameLengthLabel != "0m 00s" {
+		t.Fatalf("clamped game length = %d / %q", view.GameLengthSeconds, view.GameLengthLabel)
+	}
+	if len(view.Team1.Players) != 5 || len(view.Team2.Players) != 5 {
+		t.Fatalf("team sizes = %d / %d", len(view.Team1.Players), len(view.Team2.Players))
+	}
+	owner := view.Team1.Players[0]
+	if !owner.IsSearchedPlayer || owner.RiotID != "Player 1#NA1" || owner.ChampionName != "Ahri" {
+		t.Fatalf("owner = %#v", owner)
+	}
+	if owner.Rank == nil || owner.Rank.Tier != "PLATINUM" || owner.Rank.Wins != 24 || owner.Rank.Losses != 16 || owner.Rank.WinRatePercent != 60 {
+		t.Fatalf("owner rank = %#v", owner.Rank)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if spectatorCalls != 1 || leagueCalls != 10 || catalogCalls != 1 {
+		t.Fatalf("request counts: spectator=%d league=%d catalog=%d", spectatorCalls, leagueCalls, catalogCalls)
+	}
+}
+
+func TestLiveGame404MeansNotActive(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	client := newTestRiotClient(server.URL)
+
+	active, err := client.HasLiveGame(context.Background(), "kr", "not-playing")
+	if err != nil || active {
+		t.Fatalf("HasLiveGame() = %v, %v, want false, nil", active, err)
+	}
+	if _, err := client.LoadLiveGame(context.Background(), "kr", "not-playing"); !errors.Is(err, errNotInLiveGame) {
+		t.Fatalf("LoadLiveGame() error = %v, want %v", err, errNotInLiveGame)
+	}
+}
+
+func TestNonRankedLiveGameSkipsLeagueLookups(t *testing.T) {
+	leagueCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "/lol/spectator/"):
+			w.Write([]byte(`{"gameId":1,"gameLength":30,"gameQueueConfigId":450,"participants":[{"puuid":"p1","riotId":"ARAM#NA1","championId":103,"teamId":100}]}`))
+		case strings.Contains(r.URL.Path, "/lol/league/"):
+			leagueCalls++
+			w.Write([]byte(`[]`))
+		case strings.HasSuffix(r.URL.Path, "/data/en_US/champion.json"):
+			w.Write([]byte(`{"data":{"Ahri":{"id":"Ahri","key":"103","name":"Ahri"}}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client := newTestRiotClient(server.URL)
+	client.DataDragonBase = server.URL
+
+	view, err := client.LoadLiveGame(context.Background(), "na1", "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Ranked || view.QueueLabel != "ARAM" || leagueCalls != 0 {
+		t.Fatalf("non-ranked view = %#v, league calls = %d", view, leagueCalls)
 	}
 }
 
@@ -847,6 +971,61 @@ func TestEmbeddedIndexTemplateRendersRedesignedMatchStats(t *testing.T) {
 	}
 }
 
+func TestProfileShowsLiveGameButtonOnlyWhenActive(t *testing.T) {
+	tmpl := template.Must(parseTemplates())
+	checker := &stubLiveChecker{active: true}
+	app := &App{Templates: tmpl, Searcher: liveStubSearcher{}, LiveChecker: checker}
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/?q=Faker%23KR1&region=kr", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Live Game") || !strings.Contains(body, `/live/kr/player-puuid?me=Faker%23KR1`) {
+		t.Fatalf("active profile missing live link: %s", body)
+	}
+	if checker.calls != 1 || checker.region != "kr" || checker.puuid != "player-puuid" {
+		t.Fatalf("live checker = %#v", checker)
+	}
+
+	checker.active = false
+	rr = httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/?q=Faker%23KR1&region=kr", nil))
+	if strings.Contains(rr.Body.String(), "Live Game") {
+		t.Fatalf("inactive profile rendered live link: %s", rr.Body.String())
+	}
+}
+
+func TestLiveGameHandlerRendersRankedPlayers(t *testing.T) {
+	tmpl := template.Must(parseTemplates())
+	loader := &stubLiveLoader{view: &LiveGameView{
+		QueueLabel:        "Ranked Flex",
+		RankQueueLabel:    "Flex 5v5",
+		GameLengthSeconds: 125,
+		GameLengthLabel:   "2m 05s",
+		Ranked:            true,
+		Team1: LiveTeamView{TeamID: 100, Ranked: true, Players: []LivePlayerView{{
+			RiotID: "Faker#KR1", ChampionName: "Ahri", IsSearchedPlayer: true,
+			Rank: &RankView{Tier: "DIAMOND", Division: "II", LeaguePoints: 40, Wins: 60, Losses: 40, WinRatePercent: 60},
+		}}},
+		Team2: LiveTeamView{TeamID: 200, Ranked: true},
+	}}
+	app := &App{Templates: tmpl, LiveLoader: loader}
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/live/kr/player-puuid?me=Faker%23KR1", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	for _, want := range []string{"Live now", "Ranked Flex", "Flex 5v5 current-season standings", "Faker#KR1", "DIAMOND II · 40 LP", "60W 40L · 60% WR", `data-live-seconds="125"`} {
+		if !strings.Contains(rr.Body.String(), want) {
+			t.Fatalf("live page missing %q: %s", want, rr.Body.String())
+		}
+	}
+	if loader.region != "kr" || loader.puuid != "player-puuid" {
+		t.Fatalf("loader got region=%q puuid=%q", loader.region, loader.puuid)
+	}
+}
+
 func TestEmbeddedIndexTemplateOmitsAdvancedMatchStats(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
 	seventyThree, zero, ninety := 73, 0, 90
@@ -1037,6 +1216,35 @@ type stubSearcher struct{}
 
 func (stubSearcher) Search(_ context.Context, riotID, region string, _ time.Time) (*ProfileView, []MatchView, error) {
 	return &ProfileView{GameName: "Faker", TagLine: "KR1"}, []MatchView{{MatchID: "KR_1", CS: 123, Gold: 456}}, nil
+}
+
+type liveStubSearcher struct{}
+
+func (liveStubSearcher) Search(_ context.Context, _, _ string, _ time.Time) (*ProfileView, []MatchView, error) {
+	return &ProfileView{PUUID: "player-puuid", GameName: "Faker", TagLine: "KR1"}, []MatchView{{MatchID: "KR_1"}}, nil
+}
+
+type stubLiveChecker struct {
+	active        bool
+	calls         int
+	region, puuid string
+}
+
+func (s *stubLiveChecker) HasLiveGame(_ context.Context, region, puuid string) (bool, error) {
+	s.calls++
+	s.region, s.puuid = region, puuid
+	return s.active, nil
+}
+
+type stubLiveLoader struct {
+	view          *LiveGameView
+	err           error
+	region, puuid string
+}
+
+func (s *stubLiveLoader) LoadLiveGame(_ context.Context, region, puuid string) (*LiveGameView, error) {
+	s.region, s.puuid = region, puuid
+	return s.view, s.err
 }
 
 type controlledSearcher struct {

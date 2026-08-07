@@ -11,13 +11,16 @@
     <div class="profile-level">level {{.Profile.SummonerLevel}}</div>
   </div>
   <div class="update-block">
-    <form method="get" action="/">
-      <input type="hidden" name="q" value="{{.Query}}">
-      <input type="hidden" name="region" value="{{.Region}}">
-      <input type="hidden" name="count" value="{{.RequestedMatches}}">
-      <input type="hidden" name="refresh" value="1">
-      <button type="submit" class="btn muted">Update</button>
-    </form>
+    <div class="profile-actions">
+      <form method="get" action="/">
+        <input type="hidden" name="q" value="{{.Query}}">
+        <input type="hidden" name="region" value="{{.Region}}">
+        <input type="hidden" name="count" value="{{.RequestedMatches}}">
+        <input type="hidden" name="refresh" value="1">
+        <button type="submit" class="btn muted">Update</button>
+      </form>
+      {{if .LiveGameURL}}<a class="btn live-game-btn" href="{{.LiveGameURL}}"><span class="live-dot" aria-hidden="true"></span>Live Game</a>{{end}}
+    </div>
     <div class="last-updated">{{.LastUpdatedLabel}}</div>
   </div>
 </div>

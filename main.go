@@ -25,6 +25,9 @@ import (
 const defaultDataDragonVersion = "16.14.1"
 const defaultMatchCount = 20
 const maxMatchCount = 100
+const activeGameCacheTTL = 30 * time.Second
+
+var errNotInLiveGame = errors.New("This player is no longer in a live game.")
 
 // riotVerificationToken proves domain ownership for the Riot Developer Portal
 // API key application. Safe to remove once the application is approved.
@@ -83,6 +86,7 @@ type PageData struct {
 	NextMatchCount    int
 	CanLoadMore       bool
 	SupportsExpansion bool
+	LiveGameURL       string
 }
 
 type RecentSummaryView struct {
@@ -113,12 +117,47 @@ type RoleSummaryView struct {
 }
 
 type ProfileView struct {
+	PUUID          string
 	GameName       string
 	TagLine        string
 	ProfileIconURL string
 	SummonerLevel  int
 	SoloRank       *RankView
 	FlexRank       *RankView
+}
+
+type LivePageData struct {
+	Query  string
+	Region string
+	Error  string
+	Game   *LiveGameView
+}
+
+type LiveGameView struct {
+	GameID            int64
+	QueueLabel        string
+	RankQueueLabel    string
+	GameLengthSeconds int
+	GameLengthLabel   string
+	Ranked            bool
+	Team1             LiveTeamView
+	Team2             LiveTeamView
+}
+
+type LiveTeamView struct {
+	TeamID  int
+	Ranked  bool
+	Players []LivePlayerView
+}
+
+type LivePlayerView struct {
+	PUUID            string
+	RiotID           string
+	ChampionName     string
+	ChampionIconURL  string
+	IsSearchedPlayer bool
+	Rank             *RankView
+	RankError        string
 }
 
 type RankView struct {
@@ -233,6 +272,14 @@ type MatchLoader interface {
 	MatchDetail(context.Context, string, string, time.Time) (*MatchDetailView, error)
 }
 
+type LiveGameChecker interface {
+	HasLiveGame(context.Context, string, string) (bool, error)
+}
+
+type LiveGameLoader interface {
+	LoadLiveGame(context.Context, string, string) (*LiveGameView, error)
+}
+
 type SearchSnapshot struct {
 	Profile   *ProfileView
 	Matches   []MatchView
@@ -278,6 +325,8 @@ type App struct {
 	Templates   *template.Template
 	Searcher    Searcher
 	MatchLoader MatchLoader
+	LiveChecker LiveGameChecker
+	LiveLoader  LiveGameLoader
 	Cache       *SearchCache
 	Now         func() time.Time
 	StaticFS    fs.FS
@@ -291,9 +340,37 @@ func (a *App) Handler() http.Handler {
 		mux.Handle("GET /static/", requireStaticRevalidation(staticHandler))
 	}
 	mux.HandleFunc("GET /riot.txt", handleRiotVerification)
+	mux.HandleFunc("GET /live/{region}/{puuid}", a.handleLiveGame)
 	mux.HandleFunc("GET /match/{id}", a.handleMatchDetail)
 	mux.HandleFunc("GET /", a.handleIndex)
 	return mux
+}
+
+func (a *App) handleLiveGame(w http.ResponseWriter, r *http.Request) {
+	data := LivePageData{
+		Query:  strings.TrimSpace(r.URL.Query().Get("me")),
+		Region: strings.ToLower(strings.TrimSpace(r.PathValue("region"))),
+	}
+	puuid := strings.TrimSpace(r.PathValue("puuid"))
+	if !supportedRegion(data.Region) || puuid == "" {
+		data.Error = "Invalid live-game link."
+	} else if a.LiveLoader == nil {
+		data.Error = "Live-game details are temporarily unavailable."
+	} else {
+		game, err := a.LiveLoader.LoadLiveGame(r.Context(), data.Region, puuid)
+		if err != nil {
+			data.Error = err.Error()
+			if a.Logger != nil {
+				a.Logger.Printf("live game for %q in %s: %v", puuid, data.Region, err)
+			}
+		} else {
+			data.Game = game
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := a.Templates.ExecuteTemplate(w, "liveLayout", data); err != nil && a.Logger != nil {
+		a.Logger.Printf("render live game for %q: %v", puuid, err)
+	}
 }
 
 func requireStaticRevalidation(next http.Handler) http.Handler {
@@ -386,6 +463,17 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 					applySnapshot(&data, snapshot, completedAt)
 				}
 			}
+		}
+	}
+	if data.Profile != nil && data.Profile.PUUID != "" && a.LiveChecker != nil {
+		active, err := a.LiveChecker.HasLiveGame(r.Context(), data.Region, data.Profile.PUUID)
+		if err != nil {
+			if a.Logger != nil {
+				a.Logger.Printf("check live game for %q in %s: %v", data.Profile.PUUID, data.Region, err)
+			}
+		} else if active {
+			me := data.Profile.GameName + "#" + data.Profile.TagLine
+			data.LiveGameURL = "/live/" + url.PathEscape(data.Region) + "/" + url.PathEscape(data.Profile.PUUID) + "?me=" + url.QueryEscape(me)
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -594,6 +682,37 @@ type RiotClient struct {
 	matchCache         map[string]matchDTO
 	timelineCacheMu    sync.RWMutex
 	timelineCache      map[string]timelineDTO
+	activeGameCacheMu  sync.RWMutex
+	activeGameCache    map[string]activeGameCacheEntry
+	championCatalogMu  sync.RWMutex
+	championCatalog    map[int]championCatalogEntry
+}
+
+type activeGameCacheEntry struct {
+	Game      spectatorGameDTO
+	Active    bool
+	ExpiresAt time.Time
+}
+
+type spectatorGameDTO struct {
+	GameID            int64                     `json:"gameId"`
+	GameLength        int                       `json:"gameLength"`
+	GameQueueConfigID int                       `json:"gameQueueConfigId"`
+	Participants      []spectatorParticipantDTO `json:"participants"`
+}
+
+type spectatorParticipantDTO struct {
+	PUUID        string `json:"puuid"`
+	RiotID       string `json:"riotId"`
+	SummonerName string `json:"summonerName"`
+	ChampionID   int    `json:"championId"`
+	TeamID       int    `json:"teamId"`
+}
+
+type championCatalogEntry struct {
+	ID   string `json:"id"`
+	Key  string `json:"key"`
+	Name string `json:"name"`
 }
 
 type accountDTO struct {
@@ -752,6 +871,7 @@ func NewRiotClient(apiKey string) *RiotClient {
 		nextRequest:        make(map[string]time.Time),
 		matchCache:         make(map[string]matchDTO),
 		timelineCache:      make(map[string]timelineDTO),
+		activeGameCache:    make(map[string]activeGameCacheEntry),
 	}
 }
 
@@ -788,6 +908,7 @@ func (c *RiotClient) SearchCount(ctx context.Context, riotID, region string, now
 		return nil, nil, err
 	}
 	profile := &ProfileView{
+		PUUID:          account.PUUID,
 		GameName:       account.GameName,
 		TagLine:        account.TagLine,
 		ProfileIconURL: fmt.Sprintf("%s/cdn/%s/img/profileicon/%d.png", c.DataDragonBase, c.DataDragonVer, summoner.ProfileIconID),
@@ -842,6 +963,181 @@ func rankView(entry leagueEntryDTO) *RankView {
 		Losses:         entry.Losses,
 		WinRatePercent: winRate,
 	}
+}
+
+func (c *RiotClient) HasLiveGame(ctx context.Context, region, puuid string) (bool, error) {
+	_, active, err := c.activeGame(ctx, region, puuid)
+	return active, err
+}
+
+func (c *RiotClient) LoadLiveGame(ctx context.Context, region, searchedPUUID string) (*LiveGameView, error) {
+	game, active, err := c.activeGame(ctx, region, searchedPUUID)
+	if err != nil {
+		return nil, err
+	}
+	if !active {
+		return nil, errNotInLiveGame
+	}
+
+	queueType, rankLabel, ranked := liveRankQueue(game.GameQueueConfigID)
+	length := max(game.GameLength, 0)
+	view := &LiveGameView{
+		GameID:            game.GameID,
+		QueueLabel:        queueLabel(game.GameQueueConfigID),
+		RankQueueLabel:    rankLabel,
+		GameLengthSeconds: length,
+		GameLengthLabel:   durationLabel(length),
+		Ranked:            ranked,
+		Team1:             LiveTeamView{TeamID: 100, Ranked: ranked, Players: make([]LivePlayerView, 0, 5)},
+		Team2:             LiveTeamView{TeamID: 200, Ranked: ranked, Players: make([]LivePlayerView, 0, 5)},
+	}
+
+	catalog, _ := c.loadChampionCatalog(ctx)
+	players := make([]LivePlayerView, len(game.Participants))
+	for i, participant := range game.Participants {
+		champion := catalog[participant.ChampionID]
+		championName := champion.Name
+		if championName == "" {
+			championName = fmt.Sprintf("Champion %d", participant.ChampionID)
+		}
+		championURL := ""
+		if champion.ID != "" {
+			championURL = c.championURL(c.DataDragonVer, champion.ID)
+		}
+		players[i] = LivePlayerView{
+			PUUID:            participant.PUUID,
+			RiotID:           spectatorRiotID(participant),
+			ChampionName:     championName,
+			ChampionIconURL:  championURL,
+			IsSearchedPlayer: participant.PUUID != "" && participant.PUUID == searchedPUUID,
+		}
+	}
+
+	if ranked {
+		sem := make(chan struct{}, 4)
+		var wg sync.WaitGroup
+		for i, participant := range game.Participants {
+			if participant.PUUID == "" {
+				players[i].RankError = "Player identity hidden"
+				continue
+			}
+			i, participant := i, participant
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				select {
+				case sem <- struct{}{}:
+					defer func() { <-sem }()
+				case <-ctx.Done():
+					players[i].RankError = "Rank unavailable"
+					return
+				}
+				entries, lookupErr := c.lookupRanks(ctx, region, participant.PUUID)
+				if lookupErr != nil {
+					players[i].RankError = "Rank unavailable"
+					return
+				}
+				for _, entry := range entries {
+					if entry.QueueType == queueType {
+						players[i].Rank = rankView(entry)
+						break
+					}
+				}
+			}()
+		}
+		wg.Wait()
+	}
+
+	for i, participant := range game.Participants {
+		if participant.TeamID == 200 {
+			view.Team2.Players = append(view.Team2.Players, players[i])
+		} else {
+			view.Team1.Players = append(view.Team1.Players, players[i])
+		}
+	}
+	return view, nil
+}
+
+func liveRankQueue(queueID int) (queueType, label string, ranked bool) {
+	switch queueID {
+	case 420:
+		return "RANKED_SOLO_5x5", "Solo/Duo", true
+	case 440:
+		return "RANKED_FLEX_SR", "Flex 5v5", true
+	default:
+		return "", "", false
+	}
+}
+
+func spectatorRiotID(participant spectatorParticipantDTO) string {
+	if riotID := strings.TrimSpace(participant.RiotID); riotID != "" {
+		return riotID
+	}
+	if name := strings.TrimSpace(participant.SummonerName); name != "" {
+		return name
+	}
+	return "Hidden player"
+}
+
+func (c *RiotClient) activeGame(ctx context.Context, region, puuid string) (spectatorGameDTO, bool, error) {
+	if strings.TrimSpace(c.APIKey) == "" {
+		return spectatorGameDTO{}, false, errors.New("Riot API key is not configured.")
+	}
+	key := strings.ToLower(strings.TrimSpace(region)) + "\x00" + strings.TrimSpace(puuid)
+	now := time.Now()
+	c.activeGameCacheMu.RLock()
+	cached, ok := c.activeGameCache[key]
+	c.activeGameCacheMu.RUnlock()
+	if ok && now.Before(cached.ExpiresAt) {
+		return cached.Game, cached.Active, nil
+	}
+
+	endpoint := c.PlatformBaseURL(region) + "/lol/spectator/v5/active-games/by-summoner/" + url.PathEscape(puuid)
+	var game spectatorGameDTO
+	found, err := c.getJSONMaybeNotFound(ctx, endpoint, &game)
+	if err != nil {
+		return spectatorGameDTO{}, false, err
+	}
+	entry := activeGameCacheEntry{Game: game, Active: found, ExpiresAt: now.Add(activeGameCacheTTL)}
+	c.activeGameCacheMu.Lock()
+	if c.activeGameCache == nil {
+		c.activeGameCache = make(map[string]activeGameCacheEntry)
+	}
+	c.activeGameCache[key] = entry
+	c.activeGameCacheMu.Unlock()
+	return game, found, nil
+}
+
+func (c *RiotClient) loadChampionCatalog(ctx context.Context) (map[int]championCatalogEntry, error) {
+	c.championCatalogMu.RLock()
+	if c.championCatalog != nil {
+		catalog := c.championCatalog
+		c.championCatalogMu.RUnlock()
+		return catalog, nil
+	}
+	c.championCatalogMu.RUnlock()
+
+	var response struct {
+		Data map[string]championCatalogEntry `json:"data"`
+	}
+	endpoint := c.DataDragonBase + "/cdn/" + c.DataDragonVer + "/data/en_US/champion.json"
+	if err := c.getPublicJSON(ctx, endpoint, &response); err != nil {
+		return nil, err
+	}
+	catalog := make(map[int]championCatalogEntry, len(response.Data))
+	for _, champion := range response.Data {
+		id, err := strconv.Atoi(champion.Key)
+		if err == nil {
+			catalog[id] = champion
+		}
+	}
+	c.championCatalogMu.Lock()
+	if c.championCatalog == nil {
+		c.championCatalog = catalog
+	}
+	catalog = c.championCatalog
+	c.championCatalogMu.Unlock()
+	return catalog, nil
 }
 
 func (c *RiotClient) listMatchIDs(ctx context.Context, region, puuid string, count int) ([]string, error) {
@@ -957,39 +1253,69 @@ func firstBloodVictimID(timeline timelineDTO) int {
 }
 
 func (c *RiotClient) getJSON(ctx context.Context, endpoint string, dst any) error {
+	found, err := c.getJSONMaybeNotFound(ctx, endpoint, dst)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("No player found for that Riot ID and region.")
+	}
+	return nil
+}
+
+func (c *RiotClient) getJSONMaybeNotFound(ctx context.Context, endpoint string, dst any) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return errors.New("Riot services are temporarily unavailable.")
+		return false, errors.New("Riot services are temporarily unavailable.")
 	}
 	req.Header.Set("X-Riot-Token", c.APIKey)
 	if err := c.waitForRequestSlot(ctx, req.URL.Host); err != nil {
-		return err
+		return false, err
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return false, ctx.Err()
 		}
-		return errors.New("Riot services are temporarily unavailable.")
+		return false, errors.New("Riot services are temporarily unavailable.")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		switch resp.StatusCode {
 		case http.StatusNotFound:
-			return errors.New("No player found for that Riot ID and region.")
+			return false, nil
 		case http.StatusUnauthorized, http.StatusForbidden:
-			return errors.New("Riot API key is invalid or expired. Replace RIOT_API_KEY and restart the server.")
+			return false, errors.New("Riot API key is invalid or expired. Replace RIOT_API_KEY and restart the server.")
 		case http.StatusTooManyRequests:
 			if retry := resp.Header.Get("Retry-After"); retry != "" {
-				return fmt.Errorf("Riot API rate limit reached. Try again in %s seconds", retry)
+				return false, fmt.Errorf("Riot API rate limit reached. Try again in %s seconds", retry)
 			}
-			return errors.New("Riot API rate limit reached. Try again shortly.")
+			return false, errors.New("Riot API rate limit reached. Try again shortly.")
 		default:
-			return errors.New("Riot services are temporarily unavailable.")
+			return false, errors.New("Riot services are temporarily unavailable.")
 		}
 	}
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
-		return errors.New("Riot services returned an unexpected response.")
+		return false, errors.New("Riot services returned an unexpected response.")
+	}
+	return true, nil
+}
+
+func (c *RiotClient) getPublicJSON(ctx context.Context, endpoint string, dst any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return errors.New("Data Dragon is temporarily unavailable.")
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return errors.New("Data Dragon is temporarily unavailable.")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return errors.New("Data Dragon is temporarily unavailable.")
+	}
+	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		return errors.New("Data Dragon returned an unexpected response.")
 	}
 	return nil
 }
@@ -1647,6 +1973,8 @@ func main() {
 		Templates:   tmpl,
 		Searcher:    client,
 		MatchLoader: client,
+		LiveChecker: client,
+		LiveLoader:  client,
 		Cache:       NewSearchCache(),
 		StaticFS:    staticFiles,
 		Logger:      logger,

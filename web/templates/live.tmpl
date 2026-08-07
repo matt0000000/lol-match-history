@@ -1,0 +1,84 @@
+{{define "liveLayout"}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>live game{{if .Query}} — {{.Query}}{{end}}</title>
+{{template "themeInit" .}}
+<link rel="stylesheet" href="{{styleURL}}">
+</head>
+<body>
+{{template "topbar" .}}
+<main class="live-main">
+{{template "liveContent" .}}
+</main>
+</body>
+</html>
+{{end}}
+
+{{define "liveContent"}}
+<a class="back-link" href="/?q={{.Query}}&region={{.Region}}">← Back to Match History</a>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{with .Game}}
+<section class="live-hero">
+  <div>
+    <span class="live-kicker"><span class="live-dot" aria-hidden="true"></span>Live now</span>
+    <h1>{{.QueueLabel}}</h1>
+    <p>{{if .Ranked}}{{.RankQueueLabel}} current-season standings{{else}}This queue has no ranked standings.{{end}}</p>
+  </div>
+  <div class="live-clock" data-live-seconds="{{.GameLengthSeconds}}">
+    <span class="live-clock-value">{{.GameLengthLabel}}</span>
+    <small>game time</small>
+  </div>
+</section>
+
+{{template "liveTeam" .Team1}}
+{{template "liveTeam" .Team2}}
+
+<script>
+(function(){
+  var clock = document.querySelector('[data-live-seconds]');
+  if (!clock) return;
+  var seconds = Number(clock.getAttribute('data-live-seconds')) || 0;
+  var value = clock.querySelector('.live-clock-value');
+  window.setInterval(function(){
+    seconds += 1;
+    var minutes = Math.floor(seconds / 60);
+    var remainder = String(seconds % 60).padStart(2, '0');
+    value.textContent = minutes + 'm ' + remainder + 's';
+  }, 1000);
+})();
+</script>
+{{end}}
+{{end}}
+
+{{define "liveTeam"}}
+{{$team := .}}
+<div class="section-label">{{if eq .TeamID 100}}blue team{{else}}red team{{end}}<span class="rule"></span></div>
+<div class="live-team {{if eq .TeamID 100}}blue{{else}}red{{end}}">
+  {{range .Players}}
+  <article class="live-player {{if .IsSearchedPlayer}}me{{end}}">
+    <div class="live-champion">
+      {{if .ChampionIconURL}}<img src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">{{else}}<span class="live-champion-fallback" aria-hidden="true"></span>{{end}}
+    </div>
+    <div class="live-player-name">
+      <b>{{.RiotID}}</b>
+      <span>{{.ChampionName}}{{if .IsSearchedPlayer}} · you{{end}}</span>
+    </div>
+    <div class="live-rank">
+      {{if not $team.Ranked}}
+        <b>Not ranked</b><span>No standings for this queue</span>
+      {{else if .RankError}}
+        <b>Unavailable</b><span>{{.RankError}}</span>
+      {{else if .Rank}}
+        <b>{{.Rank.Tier}} {{.Rank.Division}} · {{.Rank.LeaguePoints}} LP</b>
+        <span>{{.Rank.Wins}}W {{.Rank.Losses}}L · {{.Rank.WinRatePercent}}% WR</span>
+      {{else}}
+        <b>Unranked</b><span>No games in this queue</span>
+      {{end}}
+    </div>
+  </article>
+  {{end}}
+</div>
+{{end}}
