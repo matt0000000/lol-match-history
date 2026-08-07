@@ -1015,7 +1015,7 @@ func TestLiveGameHandlerRendersRankedPlayers(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"Live match", "Normal Draft", "Every player’s current", "Solo/Duo</b> season record", "blue team", "Faker#KR1", "DIAMOND II · 40 LP", "60W 40L · 60% WR", `data-live-seconds="125"`} {
+	for _, want := range []string{"Live match", "Normal Draft", "Every player’s current", "Solo/Duo</b> season record", "blue team", "Faker#KR1", "DIAMOND II", "40 LP", `<b>60</b><small>wins</small>`, `<b>40</b><small>losses</small>`, `<b>60%</b><small>win rate</small>`, `data-live-seconds="125"`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("live page missing %q: %s", want, rr.Body.String())
 		}

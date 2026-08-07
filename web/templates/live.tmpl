@@ -67,19 +67,27 @@
   <article class="live-player {{if .IsSearchedPlayer}}me{{end}}">
     <div class="live-champion">
       {{if .ChampionIconURL}}<img src="{{.ChampionIconURL}}" alt="{{.ChampionName}}">{{else}}<span class="live-champion-fallback" aria-hidden="true"></span>{{end}}
+      <span class="live-champion-name">{{.ChampionName}}</span>
+      {{if .IsSearchedPlayer}}<span class="live-you-badge">YOU</span>{{end}}
     </div>
-    <div class="live-player-name">
-      <b>{{.RiotID}}</b>
-      <span>{{.ChampionName}}{{if .IsSearchedPlayer}} · you{{end}}</span>
-    </div>
-    <div class="live-rank">
-      {{if .RankError}}
-        <b>Unavailable</b><span>{{.RankError}}</span>
-      {{else if .Rank}}
-        <b>{{.Rank.Tier}} {{.Rank.Division}} · {{.Rank.LeaguePoints}} LP</b>
-        <span>{{.Rank.Wins}}W {{.Rank.Losses}}L · {{.Rank.WinRatePercent}}% WR</span>
-      {{else}}
-        <b>Unranked</b><span>No games in this queue</span>
+    <div class="live-card-body">
+      <div class="live-player-name"><b>{{.RiotID}}</b></div>
+      <div class="live-rank">
+        {{if .RankError}}
+          <b>Unavailable</b><span>{{.RankError}}</span>
+        {{else if .Rank}}
+          <b>{{.Rank.Tier}} {{.Rank.Division}}</b>
+          <span>{{.Rank.LeaguePoints}} LP</span>
+        {{else}}
+          <b>Unranked</b><span>Solo/Duo</span>
+        {{end}}
+      </div>
+      {{if .Rank}}
+      <div class="live-record">
+        <span><b>{{.Rank.Wins}}</b><small>wins</small></span>
+        <span><b>{{.Rank.Losses}}</b><small>losses</small></span>
+        <span><b>{{.Rank.WinRatePercent}}%</b><small>win rate</small></span>
+      </div>
       {{end}}
     </div>
   </article>
