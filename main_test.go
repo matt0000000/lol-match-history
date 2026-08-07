@@ -227,7 +227,7 @@ func TestLiveGameUsesCachedSpectatorGameAndLoadsTenRankEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.GameID != 987 || view.QueueLabel != "Ranked Solo/Duo" || view.RankQueueLabel != "Solo/Duo" || !view.Ranked {
+	if view.GameID != 987 || view.QueueLabel != "Ranked Solo/Duo" || view.RankQueueLabel != "Solo/Duo" {
 		t.Fatalf("live game labels = %#v", view)
 	}
 	if view.GameLengthSeconds != 0 || view.GameLengthLabel != "0m 00s" {
@@ -264,7 +264,7 @@ func TestLiveGame404MeansNotActive(t *testing.T) {
 	}
 }
 
-func TestNonRankedLiveGameSkipsLeagueLookups(t *testing.T) {
+func TestLiveGameAlwaysUsesSoloQueueRanks(t *testing.T) {
 	leagueCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -288,8 +288,8 @@ func TestNonRankedLiveGameSkipsLeagueLookups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Ranked || view.QueueLabel != "ARAM" || leagueCalls != 0 {
-		t.Fatalf("non-ranked view = %#v, league calls = %d", view, leagueCalls)
+	if view.QueueLabel != "ARAM" || view.RankQueueLabel != "Solo/Duo" || leagueCalls != 1 {
+		t.Fatalf("live view = %#v, league calls = %d", view, leagueCalls)
 	}
 }
 
@@ -999,16 +999,15 @@ func TestProfileShowsLiveGameButtonOnlyWhenActive(t *testing.T) {
 func TestLiveGameHandlerRendersRankedPlayers(t *testing.T) {
 	tmpl := template.Must(parseTemplates())
 	loader := &stubLiveLoader{view: &LiveGameView{
-		QueueLabel:        "Ranked Flex",
-		RankQueueLabel:    "Flex 5v5",
+		QueueLabel:        "Normal Draft",
+		RankQueueLabel:    "Solo/Duo",
 		GameLengthSeconds: 125,
 		GameLengthLabel:   "2m 05s",
-		Ranked:            true,
-		Team1: LiveTeamView{TeamID: 100, Ranked: true, Players: []LivePlayerView{{
+		Team1: LiveTeamView{TeamID: 100, Players: []LivePlayerView{{
 			RiotID: "Faker#KR1", ChampionName: "Ahri", IsSearchedPlayer: true,
 			Rank: &RankView{Tier: "DIAMOND", Division: "II", LeaguePoints: 40, Wins: 60, Losses: 40, WinRatePercent: 60},
 		}}},
-		Team2: LiveTeamView{TeamID: 200, Ranked: true},
+		Team2: LiveTeamView{TeamID: 200},
 	}}
 	app := &App{Templates: tmpl, LiveLoader: loader}
 	rr := httptest.NewRecorder()
@@ -1016,7 +1015,7 @@ func TestLiveGameHandlerRendersRankedPlayers(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"Live now", "Ranked Flex", "Flex 5v5 current-season standings", "Faker#KR1", "DIAMOND II · 40 LP", "60W 40L · 60% WR", `data-live-seconds="125"`} {
+	for _, want := range []string{"Live match", "Normal Draft", "Every player’s current", "Solo/Duo</b> season record", "blue team", "Faker#KR1", "DIAMOND II · 40 LP", "60W 40L · 60% WR", `data-live-seconds="125"`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("live page missing %q: %s", want, rr.Body.String())
 		}

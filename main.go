@@ -139,14 +139,12 @@ type LiveGameView struct {
 	RankQueueLabel    string
 	GameLengthSeconds int
 	GameLengthLabel   string
-	Ranked            bool
 	Team1             LiveTeamView
 	Team2             LiveTeamView
 }
 
 type LiveTeamView struct {
 	TeamID  int
-	Ranked  bool
 	Players []LivePlayerView
 }
 
@@ -979,17 +977,16 @@ func (c *RiotClient) LoadLiveGame(ctx context.Context, region, searchedPUUID str
 		return nil, errNotInLiveGame
 	}
 
-	queueType, rankLabel, ranked := liveRankQueue(game.GameQueueConfigID)
+	const soloQueueType = "RANKED_SOLO_5x5"
 	length := max(game.GameLength, 0)
 	view := &LiveGameView{
 		GameID:            game.GameID,
 		QueueLabel:        queueLabel(game.GameQueueConfigID),
-		RankQueueLabel:    rankLabel,
+		RankQueueLabel:    "Solo/Duo",
 		GameLengthSeconds: length,
 		GameLengthLabel:   durationLabel(length),
-		Ranked:            ranked,
-		Team1:             LiveTeamView{TeamID: 100, Ranked: ranked, Players: make([]LivePlayerView, 0, 5)},
-		Team2:             LiveTeamView{TeamID: 200, Ranked: ranked, Players: make([]LivePlayerView, 0, 5)},
+		Team1:             LiveTeamView{TeamID: 100, Players: make([]LivePlayerView, 0, 5)},
+		Team2:             LiveTeamView{TeamID: 200, Players: make([]LivePlayerView, 0, 5)},
 	}
 
 	catalog, _ := c.loadChampionCatalog(ctx)
@@ -1013,40 +1010,38 @@ func (c *RiotClient) LoadLiveGame(ctx context.Context, region, searchedPUUID str
 		}
 	}
 
-	if ranked {
-		sem := make(chan struct{}, 4)
-		var wg sync.WaitGroup
-		for i, participant := range game.Participants {
-			if participant.PUUID == "" {
-				players[i].RankError = "Player identity hidden"
-				continue
-			}
-			i, participant := i, participant
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				select {
-				case sem <- struct{}{}:
-					defer func() { <-sem }()
-				case <-ctx.Done():
-					players[i].RankError = "Rank unavailable"
-					return
-				}
-				entries, lookupErr := c.lookupRanks(ctx, region, participant.PUUID)
-				if lookupErr != nil {
-					players[i].RankError = "Rank unavailable"
-					return
-				}
-				for _, entry := range entries {
-					if entry.QueueType == queueType {
-						players[i].Rank = rankView(entry)
-						break
-					}
-				}
-			}()
+	sem := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	for i, participant := range game.Participants {
+		if participant.PUUID == "" {
+			players[i].RankError = "Player identity hidden"
+			continue
 		}
-		wg.Wait()
+		i, participant := i, participant
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				players[i].RankError = "Rank unavailable"
+				return
+			}
+			entries, lookupErr := c.lookupRanks(ctx, region, participant.PUUID)
+			if lookupErr != nil {
+				players[i].RankError = "Rank unavailable"
+				return
+			}
+			for _, entry := range entries {
+				if entry.QueueType == soloQueueType {
+					players[i].Rank = rankView(entry)
+					break
+				}
+			}
+		}()
 	}
+	wg.Wait()
 
 	for i, participant := range game.Participants {
 		if participant.TeamID == 200 {
@@ -1056,17 +1051,6 @@ func (c *RiotClient) LoadLiveGame(ctx context.Context, region, searchedPUUID str
 		}
 	}
 	return view, nil
-}
-
-func liveRankQueue(queueID int) (queueType, label string, ranked bool) {
-	switch queueID {
-	case 420:
-		return "RANKED_SOLO_5x5", "Solo/Duo", true
-	case 440:
-		return "RANKED_FLEX_SR", "Flex 5v5", true
-	default:
-		return "", "", false
-	}
 }
 
 func spectatorRiotID(participant spectatorParticipantDTO) string {

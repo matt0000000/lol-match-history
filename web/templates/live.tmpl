@@ -22,10 +22,10 @@
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{with .Game}}
 <section class="live-hero">
-  <div>
-    <span class="live-kicker"><span class="live-dot" aria-hidden="true"></span>Live now</span>
+  <div class="live-hero-title">
+    <span class="live-kicker"><span class="live-dot" aria-hidden="true"></span>Live match</span>
     <h1>{{.QueueLabel}}</h1>
-    <p>{{if .Ranked}}{{.RankQueueLabel}} current-season standings{{else}}This queue has no ranked standings.{{end}}</p>
+    <p>Every player’s current <b>{{.RankQueueLabel}}</b> season record</p>
   </div>
   <div class="live-clock" data-live-seconds="{{.GameLengthSeconds}}">
     <span class="live-clock-value">{{.GameLengthLabel}}</span>
@@ -33,8 +33,10 @@
   </div>
 </section>
 
-{{template "liveTeam" .Team1}}
-{{template "liveTeam" .Team2}}
+<div class="live-board">
+  {{template "liveTeam" .Team1}}
+  {{template "liveTeam" .Team2}}
+</div>
 
 <script>
 (function(){
@@ -54,9 +56,13 @@
 {{end}}
 
 {{define "liveTeam"}}
-{{$team := .}}
-<div class="section-label">{{if eq .TeamID 100}}blue team{{else}}red team{{end}}<span class="rule"></span></div>
-<div class="live-team {{if eq .TeamID 100}}blue{{else}}red{{end}}">
+<section class="live-team {{if eq .TeamID 100}}blue{{else}}red{{end}}">
+  <header class="live-team-head">
+    <span class="live-team-orb" aria-hidden="true"></span>
+    <span>{{if eq .TeamID 100}}blue team{{else}}red team{{end}}</span>
+    <small>5 players</small>
+  </header>
+  <div class="live-roster">
   {{range .Players}}
   <article class="live-player {{if .IsSearchedPlayer}}me{{end}}">
     <div class="live-champion">
@@ -67,9 +73,7 @@
       <span>{{.ChampionName}}{{if .IsSearchedPlayer}} · you{{end}}</span>
     </div>
     <div class="live-rank">
-      {{if not $team.Ranked}}
-        <b>Not ranked</b><span>No standings for this queue</span>
-      {{else if .RankError}}
+      {{if .RankError}}
         <b>Unavailable</b><span>{{.RankError}}</span>
       {{else if .Rank}}
         <b>{{.Rank.Tier}} {{.Rank.Division}} · {{.Rank.LeaguePoints}} LP</b>
@@ -80,5 +84,6 @@
     </div>
   </article>
   {{end}}
-</div>
+  </div>
+</section>
 {{end}}

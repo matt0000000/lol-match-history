@@ -254,40 +254,50 @@ main { max-width: 1120px; margin: 0 auto; padding: 26px 22px 72px; }
 
 .live-main { max-width: 980px; }
 .live-hero {
-  display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 126px;
-  padding: 23px 25px; border: 1px solid var(--border-strong); border-radius: 17px;
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 134px;
+  padding: 25px 26px; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 20px;
   background:
-    radial-gradient(circle at 85% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 38%),
-    linear-gradient(120deg, color-mix(in srgb, var(--surface-3) 94%, transparent), color-mix(in srgb, var(--surface) 94%, transparent));
+    radial-gradient(circle at 86% 18%, color-mix(in srgb, var(--accent) 31%, transparent), transparent 34%),
+    radial-gradient(circle at 12% 100%, color-mix(in srgb, var(--gold) 17%, transparent), transparent 39%),
+    linear-gradient(122deg, color-mix(in srgb, var(--surface-3) 96%, transparent), color-mix(in srgb, var(--surface) 94%, transparent));
   box-shadow: var(--shadow);
 }
+.live-hero::after { content: ""; position: absolute; right: -55px; top: -65px; width: 220px; height: 220px; border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-radius: 50%; box-shadow: 0 0 0 26px color-mix(in srgb, var(--accent) 6%, transparent), 0 0 0 52px color-mix(in srgb, var(--accent) 4%, transparent); pointer-events: none; }
+.live-hero-title { position: relative; z-index: 1; }
 .live-kicker { display: inline-flex; align-items: center; gap: 9px; color: var(--win); font-size: 10px; font-weight: 850; letter-spacing: 1.2px; text-transform: uppercase; }
-.live-hero h1 { margin: 8px 0 2px; color: var(--ink); font-family: var(--font-display); font-size: 28px; letter-spacing: 1px; text-transform: uppercase; }
+.live-hero h1 { margin: 8px 0 3px; color: var(--ink); font-family: var(--font-display); font-size: 29px; letter-spacing: 1.1px; text-transform: uppercase; }
 .live-hero p { margin: 0; color: var(--muted); font-size: 12px; }
-.live-clock { min-width: 112px; padding: 13px 16px; border: 1px solid color-mix(in srgb, var(--gold) 52%, var(--border)); border-radius: 13px; background: color-mix(in srgb, var(--bg-deep) 48%, transparent); text-align: center; }
+.live-hero p b { color: var(--gold); }
+.live-clock { position: relative; z-index: 1; min-width: 116px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--gold) 60%, var(--border)); border-radius: 15px; background: color-mix(in srgb, var(--bg-deep) 56%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent); text-align: center; }
 .live-clock span, .live-clock small { display: block; }
 .live-clock span { color: var(--gold); font-size: 20px; font-weight: 850; font-variant-numeric: tabular-nums; }
 .live-clock small { margin-top: 2px; color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .9px; text-transform: uppercase; }
-.live-team { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.live-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; margin-top: 18px; }
+.live-team { overflow: hidden; border: 1px solid var(--border); border-radius: 17px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: 0 10px 25px rgba(0, 0, 0, .14); }
+.live-team-head { display: flex; align-items: center; gap: 8px; padding: 12px 15px; border-bottom: 1px solid var(--border); background: linear-gradient(100deg, color-mix(in srgb, var(--accent) 14%, var(--surface-2)), color-mix(in srgb, var(--surface) 78%, transparent)); color: var(--ink); font-size: 10px; font-weight: 850; letter-spacing: 1px; text-transform: uppercase; }
+.live-team.red .live-team-head { background: linear-gradient(100deg, color-mix(in srgb, var(--loss) 15%, var(--surface-2)), color-mix(in srgb, var(--surface) 78%, transparent)); }
+.live-team-head small { margin-left: auto; color: var(--muted); font-size: 8px; letter-spacing: .6px; }
+.live-team-orb { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
+.live-team.red .live-team-orb { background: var(--loss); box-shadow: 0 0 0 4px color-mix(in srgb, var(--loss) 15%, transparent); }
+.live-roster { display: grid; gap: 1px; background: var(--border); }
 .live-player {
-  position: relative; display: grid; grid-template-columns: 54px minmax(0, 1fr) minmax(158px, auto); align-items: center; gap: 12px;
-  min-width: 0; padding: 11px 14px; overflow: hidden; border: 1px solid var(--border); border-radius: 13px;
-  background: linear-gradient(105deg, color-mix(in srgb, var(--surface-2) 91%, transparent), color-mix(in srgb, var(--surface) 95%, transparent));
-  box-shadow: 0 7px 18px rgba(0, 0, 0, .12);
+  position: relative; display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 11px;
+  min-width: 0; min-height: 79px; padding: 11px 13px; overflow: hidden; background: linear-gradient(105deg, color-mix(in srgb, var(--surface-2) 93%, transparent), color-mix(in srgb, var(--surface) 96%, transparent));
 }
-.live-player::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent); }
+.live-player::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent); opacity: .75; }
 .live-team.red .live-player::before { background: var(--loss); }
-.live-player.me { border-color: color-mix(in srgb, var(--gold) 68%, var(--border)); background: linear-gradient(105deg, color-mix(in srgb, var(--gold) 10%, var(--surface-2)), var(--surface)); }
-.live-champion, .live-champion img, .live-champion-fallback { display: block; width: 54px; height: 54px; }
-.live-champion img, .live-champion-fallback { border: 1px solid var(--border-strong); border-radius: 12px; object-fit: cover; }
+.live-player.me { background: linear-gradient(105deg, color-mix(in srgb, var(--gold) 13%, var(--surface-2)), color-mix(in srgb, var(--surface) 94%, transparent)); }
+.live-player.me::after { content: "YOU"; position: absolute; top: 7px; right: 9px; color: var(--gold); font-size: 7px; font-weight: 900; letter-spacing: .8px; }
+.live-champion, .live-champion img, .live-champion-fallback { display: block; width: 56px; height: 56px; }
+.live-champion img, .live-champion-fallback { border: 1px solid var(--border-strong); border-radius: 14px; object-fit: cover; }
 .live-champion-fallback { background: color-mix(in srgb, var(--bg-deep) 55%, transparent); }
 .live-player-name { min-width: 0; }
 .live-player-name b, .live-player-name span, .live-rank b, .live-rank span { display: block; }
-.live-player-name b { overflow: hidden; color: var(--ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.live-player-name span { margin-top: 3px; color: var(--accent); font-size: 10px; font-weight: 700; }
-.live-rank { min-width: 0; text-align: right; }
-.live-rank b { overflow: hidden; color: var(--gold); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.live-rank span { margin-top: 3px; color: var(--muted); font-size: 9px; font-weight: 650; }
+.live-player-name b { overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.live-player-name span { margin-top: 4px; color: var(--accent); font-size: 9px; font-weight: 750; }
+.live-rank { min-width: 108px; padding: 7px 8px; border: 1px solid color-mix(in srgb, var(--gold) 22%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--bg-deep) 31%, transparent); text-align: right; }
+.live-rank b { overflow: hidden; color: var(--gold); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.live-rank span { margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 700; }
 
 /* Match detail */
 
@@ -413,8 +423,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 26px 22px 72px; }
   .live-hero h1 { font-size: 22px; }
   .live-clock { min-width: 98px; padding: 10px; }
   .live-clock span { font-size: 17px; }
-  .live-team { grid-template-columns: 1fr; }
-  .live-player { grid-template-columns: 50px minmax(0, 1fr) minmax(132px, auto); padding: 10px 12px; }
+  .live-board { grid-template-columns: 1fr; gap: 12px; margin-top: 13px; }
+  .live-player { grid-template-columns: 50px minmax(0, 1fr) minmax(124px, auto); padding: 10px 12px; }
   .live-champion, .live-champion img, .live-champion-fallback { width: 50px; height: 50px; }
 }
 
@@ -426,5 +436,5 @@ main { max-width: 1120px; margin: 0 auto; padding: 26px 22px 72px; }
   .live-clock { min-width: 88px; }
   .live-player { grid-template-columns: 46px minmax(0, 1fr); gap: 9px; }
   .live-champion, .live-champion img, .live-champion-fallback { width: 46px; height: 46px; }
-  .live-rank { grid-column: 2; text-align: left; }
+  .live-rank { grid-column: 2; min-width: 0; padding: 5px 0 0; border: 0; border-radius: 0; background: none; text-align: left; }
 }
