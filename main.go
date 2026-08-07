@@ -151,6 +151,7 @@ type LiveTeamView struct {
 type LivePlayerView struct {
 	PUUID            string
 	RiotID           string
+	ProfileURL       string
 	ChampionName     string
 	ChampionIconURL  string
 	IsSearchedPlayer bool
@@ -1007,6 +1008,9 @@ func (c *RiotClient) LoadLiveGame(ctx context.Context, region, searchedPUUID str
 			ChampionName:     championName,
 			ChampionIconURL:  championURL,
 			IsSearchedPlayer: participant.PUUID != "" && participant.PUUID == searchedPUUID,
+		}
+		if _, _, err := parseRiotID(players[i].RiotID); err == nil {
+			players[i].ProfileURL = "/?q=" + url.QueryEscape(players[i].RiotID) + "&region=" + url.QueryEscape(region)
 		}
 	}
 

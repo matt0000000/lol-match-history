@@ -240,6 +240,9 @@ func TestLiveGameUsesCachedSpectatorGameAndLoadsTenRankEntries(t *testing.T) {
 	if !owner.IsSearchedPlayer || owner.RiotID != "Player 1#NA1" || owner.ChampionName != "Ahri" {
 		t.Fatalf("owner = %#v", owner)
 	}
+	if owner.ProfileURL != "/?q=Player+1%23NA1&region=na1" {
+		t.Fatalf("owner profile URL = %q", owner.ProfileURL)
+	}
 	if owner.Rank == nil || owner.Rank.Tier != "PLATINUM" || owner.Rank.Wins != 24 || owner.Rank.Losses != 16 || owner.Rank.WinRatePercent != 60 {
 		t.Fatalf("owner rank = %#v", owner.Rank)
 	}
@@ -1004,7 +1007,7 @@ func TestLiveGameHandlerRendersRankedPlayers(t *testing.T) {
 		GameLengthSeconds: 125,
 		GameLengthLabel:   "2m 05s",
 		Team1: LiveTeamView{TeamID: 100, Players: []LivePlayerView{{
-			RiotID: "Faker#KR1", ChampionName: "Ahri", IsSearchedPlayer: true,
+			RiotID: "Faker#KR1", ProfileURL: "/?q=Faker%23KR1&region=kr", ChampionName: "Ahri", IsSearchedPlayer: true,
 			Rank: &RankView{Tier: "DIAMOND", Division: "II", LeaguePoints: 40, Wins: 60, Losses: 40, WinRatePercent: 60},
 		}}},
 		Team2: LiveTeamView{TeamID: 200},
@@ -1015,7 +1018,7 @@ func TestLiveGameHandlerRendersRankedPlayers(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	for _, want := range []string{"Live match", "Normal Draft", "Every player’s current", "Solo/Duo</b> season record", "blue team", "Faker#KR1", "DIAMOND II", "40 LP", `<b>60</b><small>wins</small>`, `<b>40</b><small>losses</small>`, `<b>60%</b><small>win rate</small>`, `data-live-seconds="125"`} {
+	for _, want := range []string{"Live match", "Normal Draft", "Every player’s current", "Solo/Duo</b> season record", "blue team", `href="/?q=Faker%23KR1&amp;region=kr"`, "Faker#KR1", "DIAMOND II", "40 LP", `<b>60</b><small>wins</small>`, `<b>40</b><small>losses</small>`, `<b>60%</b><small>win rate</small>`, `data-live-seconds="125"`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("live page missing %q: %s", want, rr.Body.String())
 		}

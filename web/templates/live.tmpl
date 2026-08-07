@@ -71,7 +71,7 @@
       {{if .IsSearchedPlayer}}<span class="live-you-badge">YOU</span>{{end}}
     </div>
     <div class="live-card-body">
-      <div class="live-player-name"><b>{{.RiotID}}</b></div>
+      <div class="live-player-name"><b>{{if .ProfileURL}}<a href="{{.ProfileURL}}">{{.RiotID}}</a>{{else}}{{.RiotID}}{{end}}</b></div>
       <div class="live-rank">
         {{if .RankError}}
           <b>Unavailable</b><span>{{.RankError}}</span>
