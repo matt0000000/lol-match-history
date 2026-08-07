@@ -223,9 +223,9 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
 .spell-col { display: flex; flex-direction: column; gap: 2px; }
 .spell-icon-img { width: 14px; height: 14px; border: 1px solid var(--border); }
 
-.items-row { display: flex; gap: 2px; flex-shrink: 0; }
-.item-slot-img { width: 24px; height: 24px; border: 1px solid var(--border); }
-.item-slot.empty { display: inline-block; width: 24px; height: 24px; border: 1px dashed var(--border); }
+.items-row { display: flex; flex-wrap: wrap; gap: 2px; flex-shrink: 0; }
+.item-slot-img { width: 40px; height: 40px; border: 1px solid var(--border); }
+.item-slot.empty { display: inline-block; width: 40px; height: 40px; border: 1px dashed var(--border); }
 
 .stat-cluster { display: flex; gap: 14px; margin-left: auto; font-size: 13px; }
 .stat { width: 64px; text-align: right; flex: 0 0 auto; }
@@ -244,8 +244,6 @@ main { max-width: 960px; margin: 0 auto; padding: 20px 20px 64px; }
   .result-block { width: auto; min-width: 0; }
   .champ-icon-img { width: 28px; height: 28px; }
   .items-row { grid-column: 1 / -1; }
-  .item-slot-img,
-  .item-slot.empty { width: 26px; height: 26px; }
   .stat-cluster {
     grid-column: 1 / -1;
     display: grid;
