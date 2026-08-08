@@ -35,6 +35,8 @@
 </div>
 {{end}}
 
+<div class="dashboard-grid">
+<aside class="dashboard-sidebar">
 <div class="section-label">ranked<span class="rule"></span></div>
 <div class="panel">
   <div class="panel-row rank-row">
@@ -74,6 +76,9 @@
 </div>
 {{end}}{{end}}
 
+ </aside>
+
+<section class="match-column">
 <div class="section-label">recent matches<span class="rule"></span></div>
 <div class="panel matches-panel">
 {{range .Matches}}
@@ -107,5 +112,7 @@
   <button type="submit" class="btn muted">Load 10 More</button>
 </form>
 {{end}}
+</section>
+</div>
 {{end}}
 {{end}}
